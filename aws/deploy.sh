@@ -188,8 +188,18 @@ grep -q "__MINDMAP_API__=" "$TMP_HTML" || die "Falha ao injetar API no HTML."
 aws s3 cp "$TMP_HTML" "s3://${SITE_BUCKET}/index.html" \
   --content-type "text/html; charset=utf-8" --cache-control "no-cache" >/dev/null
 rm -f "$TMP_HTML"
+# PWA: manifest, service worker e ícones
+log "Enviando assets PWA (manifest/sw/ícones)..."
+aws s3 cp "$ROOT_DIR/manifest.webmanifest" "s3://${SITE_BUCKET}/manifest.webmanifest" \
+  --content-type "application/manifest+json" --cache-control "no-cache" >/dev/null
+aws s3 cp "$ROOT_DIR/sw.js" "s3://${SITE_BUCKET}/sw.js" \
+  --content-type "application/javascript" --cache-control "no-cache" >/dev/null
+for ic in icon-192.png icon-512.png apple-touch-icon-180.png; do
+  [[ -f "$ROOT_DIR/$ic" ]] && aws s3 cp "$ROOT_DIR/$ic" "s3://${SITE_BUCKET}/$ic" \
+    --content-type "image/png" --cache-control "public,max-age=604800" >/dev/null
+done
 SITE_URL="http://${SITE_BUCKET}.s3-website-${REGION}.amazonaws.com"
-ok "Site publicado."
+ok "Site + PWA publicados."
 
 # ── 7. CloudFront (HTTPS) na frente do site ──────────────────────────────────
 ORIGIN_DOMAIN="${SITE_BUCKET}.s3-website-${REGION}.amazonaws.com"
