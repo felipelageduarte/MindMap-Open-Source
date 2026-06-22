@@ -1,6 +1,34 @@
 # MindMap — guia de desenvolvimento
 
+> ## 🚨 REGRA INVIOLÁVEL — NUNCA APAGAR DADOS DE PRODUÇÃO
+>
+> **Em hipótese alguma** apague, sobrescreva ou trunque dados de produção. Isto vale para:
+> - Tabelas DynamoDB: `mindmap-users`, `mindmap-maps` (nenhum `delete-item`, `scan→delete`, `delete-table`, `batch-write` destrutivo).
+> - Objetos no bucket de dados `mindmap-data-*` no S3 (nenhum `s3 rm`, `delete-object`, overwrite de `maps/...` ou `mindmap.json`).
+>
+> **PROIBIDO** para teste/limpeza/conveniência. Os "resets" que apagavam todas as linhas das tabelas e o prefixo `maps/` **causaram perda de dados reais — jamais repetir.**
+>
+> **Antes de QUALQUER alteração no banco/S3 de produção (mesmo não-destrutiva):**
+> 1. **Confirmação explícita do usuário** (Felipe) para aquela operação específica.
+> 2. **Backup completo no S3 ANTES** de executar (export das duas tabelas + cópia dos objetos para um prefixo `backups/<data>/`).
+>
+> Para testar: use **dados/recursos separados** (tabelas/bucket de teste, prefixo distinto, ou conta/stack à parte) — **nunca** os de produção. O teardown (`aws/teardown.sh`) só pode rodar em stacks de teste, **nunca** no prefixo `mindmap` de produção sem confirmação + backup.
+>
+> Recomendado habilitar (com confirmação): versionamento no bucket de dados e PITR nas tabelas DynamoDB.
+
 Editor de mindmap para notas. Roda 100% offline no browser, sem build de framework, sem servidor. Motor: **Mind-Elixir** (MIT). Dados persistem em `localStorage` e exportam para Markdown/JSON.
+
+## ✅ FLUXO OBRIGATÓRIO DE TODA MODIFICAÇÃO
+
+Toda alteração (feature/bug/ajuste) **DEVE** seguir, nesta ordem, sem pular etapas:
+
+1. **Testar** — validar no Chrome headless (puppeteer-core), capturar `pageerror`, conferir o comportamento. Não entregar nada sem teste passando.
+2. **Build** — `node build.mjs` (regenera `mindmap.html`).
+3. **Commit** — `git commit` com mensagem clara (Conventional-ish), incluindo o `Co-Authored-By` do Claude.
+4. **Push** — `git push` para o repositório (`origin` = `git@github.com:felipelageduarte/MindMap-Open-Source.git`, branch `main`).
+5. **Deploy** — `bash aws/deploy.sh` (sobe HTML + Lambda e invalida o CloudFront).
+
+Ou seja: **teste → build → commit → push → deploy** em toda mudança. Nada de deploy sem commit+push; nada de commit sem teste.
 
 ## Arquitetura de arquivos (IMPORTANTE)
 
