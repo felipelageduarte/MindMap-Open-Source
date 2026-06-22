@@ -945,7 +945,9 @@ async function apiJSON(method, path, bodyObj){
   const r = await fetch(API+path, { method,
     headers: Object.assign({ "content-type":"application/json" }, token? {authorization:"Bearer "+token}:{}),
     body: bodyObj!==undefined? JSON.stringify(bodyObj) : undefined });
-  if(r.status===401){ doLogout(); throw new Error("sessão expirada"); }
+  // 401 só significa "sessão expirada" em request AUTENTICADO (com token);
+  // no login/registro (sem token) deixa o erro real do servidor passar.
+  if(r.status===401 && token && !path.startsWith("/auth/")){ doLogout(); throw new Error("sessão expirada"); }
   const d = await r.json().catch(()=>({}));
   if(!r.ok) throw new Error(d.error || ("HTTP "+r.status));
   return d;
