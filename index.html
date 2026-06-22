@@ -18,9 +18,15 @@
     padding:0 14px;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(20px);
     border-bottom:1px solid var(--line)}
   #bar .logo{font-size:18px}
-  #bar input.docname{font:inherit;font-weight:600;font-size:15px;border:none;background:transparent;
-    color:#1d1d1f;max-width:280px;padding:5px 8px;border-radius:7px}
-  #bar input.docname:focus{outline:none;background:var(--accent-soft)}
+  /* nome do mapa: centralizado na barra; duplo-clique edita */
+  #bar input.docname{position:absolute;left:50%;transform:translateX(-50%);text-align:center;
+    font:inherit;font-weight:600;font-size:15px;border:1px solid transparent;background:transparent;
+    color:#1d1d1f;max-width:46vw;min-width:160px;padding:5px 12px;border-radius:8px;cursor:default;
+    text-overflow:ellipsis}
+  #bar input.docname[readonly]:hover{background:#f0f0f3}
+  #bar input.docname:not([readonly]){outline:none;border-color:var(--accent);background:#fff;cursor:text}
+  body.dark #bar input.docname[readonly]:hover{background:#2c2c30}
+  body.dark #bar input.docname:not([readonly]){background:#2c2c30}
   #bar .spacer{flex:1}
   .saved{font-size:12px;color:#86868b;min-width:54px}
   button.btn{font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;background:#fff;
@@ -194,7 +200,6 @@
   body.dark{background:#1c1c1e;color:#e8e8ea}
   body.dark #bar{background:rgba(28,28,30,.82);border-bottom-color:#333}
   body.dark #bar input.docname{color:#e8e8ea}
-  body.dark #bar input.docname:focus{background:#2c2c30}
   body.dark .saved{color:#888}
   body.dark button.btn{background:#2a2a2e;border-color:#3a3a40;color:#e8e8ea}
   body.dark button.btn:hover{background:#34343a}
@@ -218,7 +223,7 @@
   <div id="bar">
     <span class="logo">🧠</span>
     <button class="btn" id="btnTodo">✓ TODO <span id="todoBadge" style="font-size:11px;color:var(--muted)"></span></button>
-    <input class="docname" id="docname" spellcheck="false" value="Minhas Notas">
+    <input class="docname" id="docname" spellcheck="false" value="Minhas Notas" readonly title="Duplo-clique para renomear o mapa">
     <span class="saved" id="saved"></span>
     <div id="searchWrap">
       <input id="search" placeholder="🔎 Buscar nós…  ( / )" spellcheck="false" autocomplete="off">
@@ -648,15 +653,18 @@ function flash(){ const s=$("saved"); s.textContent="✓ salvo"; clearTimeout(fl
   flash._t=setTimeout(()=>s.textContent="",1300); }
 
 /* ---------- Markdown <-> data ---------- */
+// quebras de linha dentro de um nó viram <br> no markdown (mantém o item atômico) e voltam no import
+const mdEnc=t=>(t||"").replace(/\r?\n/g,"<br>");
+const mdDec=t=>(t||"").replace(/<br\s*\/?>/gi,"\n");
 function dataToMd(data){
-  const r=data.nodeData; let out="# "+(r.topic||"Mapa")+"\n\n";
-  (function w(kids,d){ (kids||[]).forEach(n=>{ out+="  ".repeat(d)+"- "+(n.topic||"")+"\n";
+  const r=data.nodeData; let out="# "+mdEnc(r.topic||"Mapa")+"\n\n";
+  (function w(kids,d){ (kids||[]).forEach(n=>{ out+="  ".repeat(d)+"- "+mdEnc(n.topic||"")+"\n";
     if(n.children&&n.children.length) w(n.children,d+1); }); })(r.children,0);
   return out;
 }
 function mdToData(md){
   const lines=md.split(/\r?\n/); let root=null; const stack=[]; let m;
-  const node=t=>({id:rid(),topic:t,children:[]});
+  const node=t=>({id:rid(),topic:mdDec(t),children:[]});
   for(const raw of lines){ if(!raw.trim())continue;
     if((m=raw.match(/^(#{1,6})\s+(.*)$/))){ const t=m[2].trim();
       if(!root){ root=node(t); stack.length=0; stack.push({n:root,ind:-1}); }
@@ -739,7 +747,21 @@ function svgToData(svgText){
 /* ---------- barra: nome / import / export / e-mail / novo ---------- */
 const nameEl=$("docname");
 try{ nameEl.value=localStorage.getItem(LS_NAME)||"Minhas Notas"; }catch(e){}
-nameEl.addEventListener("input",debSave);
+/* renomear o mapa: duplo-clique edita; blur/Enter confirma */
+function commitRename(){
+  if(nameEl.hasAttribute("readonly")) return;
+  nameEl.setAttribute("readonly","");
+  const t=(nameEl.value||"").trim()||"Sem título"; nameEl.value=t;
+  if(API && token && currentMapId){
+    apiJSON("PATCH","/maps/"+currentMapId,{title:t}).catch(()=>{});
+    const m=mapList.find(x=>x.id===currentMapId); if(m) m.title=t;
+  }
+  save();
+}
+nameEl.addEventListener("dblclick",()=>{ nameEl.removeAttribute("readonly"); nameEl.focus(); nameEl.select(); });
+nameEl.addEventListener("blur",commitRename);
+nameEl.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); nameEl.blur(); }
+  else if(e.key==="Escape"){ e.preventDefault(); nameEl.blur(); } e.stopPropagation(); });
 
 function safeName(){ return (nameEl.value||"mindmap").replace(/[^\w\-À-ÿ ]+/g,"").trim().replace(/\s+/g,"_")||"mindmap"; }
 function download(text,ext,mime){ const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");
@@ -926,10 +948,6 @@ async function openMap(id){
 }
 async function loadMapList(){ const d=await apiJSON("GET","/maps"); mapList=d.maps||[]; return mapList; }
 
-/* renomear mapa (título no índice) ao editar o nome */
-let renT=null;
-nameEl.addEventListener("input", ()=>{ if(!API||!token||!currentMapId) return;
-  clearTimeout(renT); renT=setTimeout(async()=>{ try{ await apiJSON("PATCH","/maps/"+currentMapId,{title:nameEl.value}); }catch(e){} },500); });
 
 /* ---- gate de login ---- */
 let authMode="login";
