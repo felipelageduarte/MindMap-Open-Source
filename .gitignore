@@ -1,0 +1,17 @@
+# SO / editores
+.DS_Store
+
+# deps
+node_modules/
+
+# segredos e artefatos de deploy (NUNCA versionar)
+aws/.deploy-token
+aws/.deploy-jwt
+aws/.build/
+aws/.cf.json
+aws/.site-index.html
+function.zip
+
+# dados pessoais / mapas exportados localmente
+*.crswap
+MindMap_Felipe_Duarte.json

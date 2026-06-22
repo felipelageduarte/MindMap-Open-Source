@@ -1,0 +1,6 @@
+.build/
+.deploy-token
+.deploy-jwt
+.site-index.html
+.cf.json
+function.zip

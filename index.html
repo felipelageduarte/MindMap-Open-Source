@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindMap</title>
+<link rel="stylesheet" href="vendor/MindElixir.css">
+<style>
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  html,body{margin:0;height:100%;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1d1d1f}
+  :root{--accent:#0a84ff;--line:#d2d2d7;--accent-soft:#e8f1ff;--map-bg:#f6f6f6}
+  body.dark{--map-bg:#252526}
+  /* bolinha no cruzamento das linhas (início do path = junção pai/filhos) */
+  circle.mm-jx{ fill:var(--map-bg); stroke-width:2.4 }
+
+  #bar{position:fixed;inset:0 0 auto 0;height:52px;z-index:30;display:flex;align-items:center;gap:8px;
+    padding:0 14px;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(20px);
+    border-bottom:1px solid var(--line)}
+  #bar .logo{font-size:18px}
+  #bar input.docname{font:inherit;font-weight:600;font-size:15px;border:none;background:transparent;
+    color:#1d1d1f;max-width:280px;padding:5px 8px;border-radius:7px}
+  #bar input.docname:focus{outline:none;background:var(--accent-soft)}
+  #bar .spacer{flex:1}
+  .saved{font-size:12px;color:#86868b;min-width:54px}
+  button.btn{font:inherit;font-size:13px;font-weight:500;color:#1d1d1f;background:#fff;
+    border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;transition:.12s}
+  button.btn:hover{background:#f0f0f3}
+  button.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.btn.primary:hover{background:#0070e0}
+  button.btn.linked{background:var(--ok-soft);border-color:var(--ok);color:#1d7a36;font-weight:600}
+  button.btn.reconnect{background:#fff0d6;border-color:#e0a64a;color:#92600a;font-weight:600}
+
+  /* menus suspensos da barra superior */
+  .menu{position:relative}
+  .menu-list{position:absolute;top:38px;right:0;min-width:220px;background:#fff;border:1px solid var(--line);
+    border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:5px;display:none;z-index:45}
+  .menu.open .menu-list{display:block}
+  .menu-list button{display:block;width:100%;text-align:left;font:inherit;font-size:13px;color:#1d1d1f;
+    background:none;border:none;border-radius:7px;padding:9px 11px;cursor:pointer;white-space:nowrap}
+  .menu-list button:hover{background:#f0f0f3}
+  .menu-list hr{border:none;border-top:1px solid var(--line);margin:5px 4px}
+  body.dark .menu-list{background:#242426;border-color:#3a3a40}
+  body.dark .menu-list button{color:#e8e8ea} body.dark .menu-list button:hover{background:#3a3a40}
+  body.dark .menu-list hr{border-top-color:#333}
+
+  /* Mind-Elixir força position:relative no #map -> use wrapper p/ dar altura total */
+  #mapwrap{position:absolute;top:52px;left:0;right:0;bottom:0;transition:left .2s ease}
+  #map{width:100%;height:100%}
+  body.todo-open #mapwrap{left:300px}
+
+  /* sidebar TODO */
+  #todo{position:fixed;top:52px;left:0;bottom:0;width:300px;z-index:25;background:#fff;
+    border-right:1px solid var(--line);display:flex;flex-direction:column;
+    transform:translateX(-100%);transition:transform .2s ease;box-shadow:2px 0 12px rgba(0,0,0,.04)}
+  body.todo-open #todo{transform:none}
+  #todo .th{padding:13px 16px;font-weight:600;font-size:14px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:8px}
+  #todo .th .tg{margin-left:auto;background:#e8e8ed;color:#555;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700}
+  #todoBody{overflow:auto;padding:6px 8px;flex:1}
+  .todo-sec{margin:6px 2px 14px}
+  .todo-sec-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    padding:4px 8px;display:flex;justify-content:space-between;align-items:center}
+  .todo-sec-h .c{background:#f0f0f3;border-radius:9px;padding:0 6px;font-size:10px}
+  .todo-item{display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:8px;cursor:pointer}
+  .todo-item:hover{background:#f4f4f6}
+  .todo-box{flex:0 0 auto;width:16px;height:16px;margin-top:1px;border:2px solid #c2c2c8;border-radius:4px;cursor:pointer;transition:.1s}
+  .todo-box:hover{border-color:var(--ok);background:var(--ok-soft)}
+  .todo-lbl{font-size:13px;line-height:1.4;color:#1d1d1f;flex:1;min-width:0}
+  .todo-date{flex:0 0 auto;align-self:flex-start;margin-top:1px;font-size:11px;font-weight:600;color:#555;
+    background:#f0f0f3;border-radius:8px;padding:1px 7px;white-space:nowrap}
+  .todo-date.over{background:#ffe5e5;color:#d11}
+  .todo-date.today{background:#fff0d6;color:#b25e00}
+  .todo-empty{color:var(--muted);font-size:13px;padding:28px 16px;text-align:center;line-height:1.5}
+
+  /* checkbox renderizado a partir de [] / [x] no início do nó */
+  .mm-cb{display:inline-block;width:15px;height:15px;border:2px solid currentColor;border-radius:4px;
+    margin-right:7px;vertical-align:-2px;cursor:pointer;position:relative;opacity:.85;
+    pointer-events:auto!important}  /* ME: .map-container me-tpc>* {pointer-events:none} — reativa aqui */
+  /* nó com checkbox: flex p/ centralizar o quadradinho na altura média do texto (multi-linha) */
+  .map-container me-tpc.has-cb{display:flex;align-items:center}
+  me-tpc.has-cb .mm-cb{flex:0 0 auto;margin-right:7px;vertical-align:0}
+  me-tpc.has-cb .text{flex:1 1 auto;min-width:0}
+  .mm-cb:hover{opacity:1}
+  .mm-cb.on{background:#34c759;border-color:#34c759}
+  .mm-cb.on::after{content:"";position:absolute;left:3px;top:-1px;width:4px;height:9px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+
+  /* botão flutuante de ajuda */
+  #helpBtn{position:fixed;bottom:16px;left:16px;z-index:20;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--line);background:rgba(255,255,255,.9);backdrop-filter:blur(10px);
+    font-size:16px;font-weight:700;color:#555;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+  #helpBtn:hover{background:#fff;color:#1d1d1f}
+  body.todo-open #helpBtn{left:316px}
+
+  /* modal de atalhos */
+  #help[hidden]{display:none}
+  #help{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.32);backdrop-filter:blur(3px);animation:fade .12s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  #help .card{background:#fff;border-radius:16px;padding:26px 30px;max-width:560px;width:calc(100% - 48px);
+    box-shadow:0 20px 60px rgba(0,0,0,.3);animation:rise .16s ease}
+  @keyframes rise{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}
+  #help h3{margin:0 0 4px;font-size:19px}
+  #help .sub{margin:0 0 18px;color:var(--muted);font-size:13px}
+  #help .grid{display:grid;grid-template-columns:1fr 1fr;gap:11px 26px}
+  #help .row{display:flex;align-items:center;gap:10px;font-size:13.5px}
+  #help .row .d{color:#444}
+  #help kbd{font:inherit;font-size:11.5px;background:#f0f0f3;border:1px solid var(--line);border-bottom-width:2px;
+    border-radius:5px;padding:2px 7px;white-space:nowrap;color:#1d1d1f}
+  #help .foot{margin-top:20px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;text-align:center}
+  @media(max-width:560px){ #help .grid{grid-template-columns:1fr} }
+
+  /* modais (auth / mapas / usuários / conta) */
+  #auth[hidden],#maps[hidden],#users[hidden],#userMenu[hidden]{display:none}
+  #auth,#maps,#users,#userMenu{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.38);backdrop-filter:blur(3px);animation:fade .12s ease}
+  #auth .card,#maps .card,#users .card,#userMenu .card{background:#fff;border-radius:16px;padding:24px 28px;
+    max-width:440px;width:calc(100% - 48px);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+  #auth h3,#maps h3,#users h3,#userMenu h3{margin:0 0 4px;font-size:19px}
+  #auth .sub,#maps .sub,#users .sub,#userMenu .sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+  .fld{display:block;font-size:12.5px;color:#444;margin-bottom:12px}
+  .fld input{display:block;width:100%;margin-top:5px;font:inherit;font-size:13.5px;padding:9px 11px;
+    border:1px solid var(--line);border-radius:8px;background:#fafafa}
+  .fld input:focus,.uin:focus{outline:none;border-color:var(--accent);background:#fff}
+  .uin{font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fafafa}
+  .cl-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  .row-item{display:flex;align-items:center;gap:8px;padding:9px 6px;border-bottom:1px solid var(--line)}
+  .row-item .grow{flex:1;min-width:0}
+  .row-item .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row-item .m{font-size:11px;color:var(--muted)}
+  .row-item.cur{background:var(--accent-soft);border-radius:8px}
+  .ico-btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:5px 8px;cursor:pointer;font-size:12px}
+  .ico-btn:hover{background:#f0f0f3}
+  .ico-btn.danger:hover{background:#ffe5e5;border-color:#f3b4b4;color:#c00}
+  .pill{font-size:10px;font-weight:700;border-radius:8px;padding:1px 7px;background:#eee;color:#555}
+  .pill.admin{background:#e8f1ff;color:#0058c4}
+  body.dark #auth .card,body.dark #maps .card,body.dark #users .card,body.dark #userMenu .card{background:#242426;color:#e8e8ea}
+  body.dark .fld,body.dark #auth .sub,body.dark #maps .sub,body.dark #users .sub,body.dark #userMenu .sub{color:#aaa}
+  body.dark .fld input,body.dark .uin{background:#2c2c30;border-color:#3a3a40;color:#e8e8ea}
+  body.dark .row-item{border-color:#333}
+  body.dark .ico-btn{background:#2a2a2e;border-color:#3a3a40;color:#e8e8ea}
+  body.dark .row-item.cur{background:#13243a}
+  body.dark .pill{background:#333;color:#bbb} body.dark .pill.admin{background:#13243a;color:#7fb4ff}
+
+  /* barra de formatação + editor rico in-place */
+  #fmt[hidden]{display:none}
+  #fmt{position:fixed;z-index:62;display:flex;align-items:center;gap:3px;padding:5px 7px;
+    background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+  #fmt .fb{width:30px;height:30px;border:1px solid transparent;background:transparent;border-radius:7px;
+    cursor:pointer;font-size:15px;color:#1d1d1f;display:flex;align-items:center;justify-content:center;line-height:1}
+  #fmt .fb:hover{background:#f0f0f3}
+  #fmt .fsep{width:1px;height:20px;background:var(--line);margin:0 3px}
+  #fmt input[type=color]{width:28px;height:28px;border:1px solid var(--line);border-radius:7px;background:none;cursor:pointer;padding:2px}
+  body.dark #fmt{background:#2a2a2e;border-color:#3a3a40}
+  body.dark #fmt .fb{color:#e8e8ea} body.dark #fmt .fb:hover{background:#3a3a40}
+  /* busca de nós */
+  #searchWrap{position:relative;margin-left:10px}
+  #search{font:inherit;font-size:13px;width:210px;padding:7px 11px;border:1px solid var(--line);
+    border-radius:9px;background:#fff;color:#1d1d1f}
+  #search:focus{outline:none;border-color:var(--accent);width:300px;transition:width .15s}
+  #searchRes[hidden]{display:none}
+  #searchRes{position:absolute;top:38px;left:0;width:340px;max-height:60vh;overflow:auto;z-index:40;
+    background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.16);padding:4px}
+  .sr{padding:7px 10px;border-radius:7px;cursor:pointer}
+  .sr:hover{background:var(--accent-soft)}
+  .sr .t{font-size:13px;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sr .m{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sr-empty{padding:12px;color:var(--muted);font-size:13px;text-align:center}
+  .sr.sel{background:var(--accent-soft)}
+  /* paleta central (Spotlight) */
+  #palette[hidden]{display:none}
+  #palette{position:fixed;inset:0;z-index:65;display:flex;justify-content:center;align-items:flex-start;
+    padding-top:14vh;background:rgba(0,0,0,.32);backdrop-filter:blur(3px);animation:fade .12s ease}
+  #palette .pal-card{width:560px;max-width:calc(100% - 40px);background:#fff;border-radius:14px;
+    box-shadow:0 24px 70px rgba(0,0,0,.35);overflow:hidden;animation:rise .14s ease}
+  #palQ{width:100%;border:none;outline:none;font:inherit;font-size:18px;padding:18px 20px;
+    border-bottom:1px solid var(--line);background:#fff;color:#1d1d1f}
+  #palRes{max-height:52vh;overflow:auto;padding:6px}
+  body.dark #palette .pal-card{background:#242426}
+  body.dark #palQ{background:#242426;color:#e8e8ea;border-bottom-color:#333}
+  body.dark .sr.sel{background:#13243a}
+  body.dark #search{background:#2a2a2e;border-color:#3a3a40;color:#e8e8ea}
+  body.dark #searchRes{background:#242426;border-color:#3a3a40}
+  body.dark .sr .t{color:#e8e8ea} body.dark .sr:hover{background:#13243a}
+
+  .rich-ed{outline:none;box-sizing:border-box}
+  .rich-ed a{color:var(--accent);text-decoration:underline}
+  /* link no nó: clicável (ME bloqueia pointer-events em filhos) + estilo */
+  .map-container me-tpc a{pointer-events:auto!important;color:var(--accent);text-decoration:underline;cursor:pointer}
+  body.dark .map-container me-tpc a{color:#7fb4ff}
+
+  /* tema escuro (chrome do app; o mapa usa o tema do Mind-Elixir) */
+  body.dark{background:#1c1c1e;color:#e8e8ea}
+  body.dark #bar{background:rgba(28,28,30,.82);border-bottom-color:#333}
+  body.dark #bar input.docname{color:#e8e8ea}
+  body.dark #bar input.docname:focus{background:#2c2c30}
+  body.dark .saved{color:#888}
+  body.dark button.btn{background:#2a2a2e;border-color:#3a3a40;color:#e8e8ea}
+  body.dark button.btn:hover{background:#34343a}
+  body.dark button.btn.linked{background:#16341f;border-color:#2e7d46;color:#7ee0a0}
+  body.dark button.btn.reconnect{background:#3a2e12;border-color:#a07a2a;color:#f0c474}
+  body.dark #todo{background:#202022;border-right-color:#333;box-shadow:2px 0 12px rgba(0,0,0,.25)}
+  body.dark #todo .th{border-bottom-color:#333}
+  body.dark .todo-item:hover{background:#2a2a2e}
+  body.dark .todo-lbl{color:#e8e8ea}
+  body.dark .todo-sec-h .c, body.dark #todo .th .tg{background:#333;color:#bbb}
+  body.dark .todo-date{background:#333;color:#bbb}
+  body.dark .todo-box{border-color:#555}
+  body.dark #helpBtn{background:rgba(42,42,46,.9);color:#ccc;border-color:#444}
+  body.dark #help .card{background:#242426;color:#e8e8ea}
+  body.dark #help .sub,body.dark #help .row .d{color:#aaa}
+  body.dark #help kbd{background:#333;border-color:#454545;color:#eee}
+  body.dark #help .foot{border-top-color:#333}
+</style>
+</head>
+<body>
+  <div id="bar">
+    <span class="logo">🧠</span>
+    <button class="btn" id="btnTodo">✓ TODO <span id="todoBadge" style="font-size:11px;color:var(--muted)"></span></button>
+    <input class="docname" id="docname" spellcheck="false" value="Minhas Notas">
+    <span class="saved" id="saved"></span>
+    <div id="searchWrap">
+      <input id="search" placeholder="🔎 Buscar nós…  ( / )" spellcheck="false" autocomplete="off">
+      <div id="searchRes" hidden></div>
+    </div>
+    <span class="spacer"></span>
+
+    <div class="menu">
+      <button class="btn menu-btn" id="mArquivo">📁 Mapa ▾</button>
+      <div class="menu-list">
+        <button data-act="new">＋ Novo mapa</button>
+        <button data-act="maps">📂 Meus mapas</button>
+        <hr>
+        <button data-act="import">⬆ Importar (.md / .json / .svg)</button>
+        <button data-act="expmd">⬇ Exportar .md</button>
+        <button data-act="expjson">⬇ Exportar .json</button>
+      </div>
+    </div>
+    <div class="menu">
+      <button class="btn menu-btn" id="mFerr">🛠 Ferramentas ▾</button>
+      <div class="menu-list">
+        <button data-act="expand">⊕ Expandir tudo</button>
+        <button data-act="collapse">⊖ Recolher tudo</button>
+        <hr>
+        <button data-act="image">🖼 Inserir imagem no nó</button>
+        <button data-act="theme" id="miTheme">🌙 Tema escuro</button>
+      </div>
+    </div>
+    <button class="btn" id="btnUsers" title="Gestão de usuários" hidden>👥 Usuários</button>
+    <button class="btn" id="btnUser" title="Conta">👤</button>
+
+    <!-- ações (acionadas pelos menus) -->
+    <div style="display:none">
+      <button id="btnNew"></button><button id="btnMaps"></button><button id="btnImg"></button>
+      <button id="btnImport"></button><button id="btnExportMd"></button><button id="btnExportJson"></button>
+      <button id="btnExpand"></button><button id="btnCollapse"></button><button id="btnTheme"></button>
+    </div>
+    <input type="file" id="file" accept=".md,.markdown,.json,.svg,text/markdown,application/json,image/svg+xml" hidden>
+    <input type="file" id="imgfile" accept="image/*" hidden>
+  </div>
+
+  <aside id="todo">
+    <div class="th">📋 Tarefas pendentes <span class="tg" id="todoTotal">0</span></div>
+    <div id="todoBody"></div>
+  </aside>
+
+  <div id="mapwrap"><div id="map"></div></div>
+
+  <button id="helpBtn" title="Atalhos (?)">?</button>
+  <div id="help" hidden>
+    <div class="card">
+      <h3>Atalhos do MindMap</h3>
+      <p class="sub">Operação rápida do mapa pelo teclado e mouse.</p>
+      <div class="grid">
+        <div class="row"><kbd>Tab</kbd><span class="d">novo nó filho</span></div>
+        <div class="row"><kbd>Enter</kbd><span class="d">novo nó irmão</span></div>
+        <div class="row"><kbd>Shift + Enter</kbd> / <kbd>2× clique</kbd><span class="d">editar texto</span></div>
+        <div class="row"><kbd>selecionar texto</kbd><span class="d">barra: B I U, cor, tamanho, 🔗 link</span></div>
+        <div class="row"><kbd>Del</kbd><span class="d">apagar nó</span></div>
+        <div class="row"><kbd>arraste</kbd><span class="d">reorganizar ramo</span></div>
+        <div class="row"><kbd>botão-direito</kbd><span class="d">menu do nó</span></div>
+        <div class="row"><kbd>+</kbd> / <kbd>−</kbd><span class="d">expandir / recolher toda a subárvore</span></div>
+        <div class="row"><kbd>Ctrl/⌘ + Z</kbd><span class="d">desfazer</span></div>
+        <div class="row"><kbd>Ctrl/⌘ + V</kbd><span class="d">colar imagem no nó</span></div>
+        <div class="row"><kbd>[]</kbd> / <kbd>[x]</kbd><span class="d">início do texto = checkbox</span></div>
+        <div class="row"><kbd>scroll</kbd> / <kbd>⌘+scroll</kbd><span class="d">mover / zoom</span></div>
+        <div class="row"><kbd>⌘/Ctrl + K</kbd> / <kbd>/</kbd><span class="d">busca central (Spotlight)</span></div>
+      </div>
+      <div class="foot">Pressione <kbd>?</kbd> ou <kbd>Esc</kbd> para fechar</div>
+    </div>
+  </div>
+
+  <!-- gate de login (não fecha sem autenticar) -->
+  <div id="auth" hidden>
+    <div class="card">
+      <h3 style="display:flex;align-items:center;gap:8px">🧠 MindMap</h3>
+      <p class="sub" id="authSub">Entre para acessar seus mapas.</p>
+      <label class="fld" id="authNameFld" style="display:none">Nome<input id="auName" autocomplete="name"></label>
+      <label class="fld">E-mail<input id="auEmail" type="email" autocomplete="email" placeholder="voce@email.com"></label>
+      <label class="fld">Senha<input id="auPass" type="password" autocomplete="current-password" placeholder="••••••••"></label>
+      <div id="auStatus" class="sub" style="margin-top:6px;min-height:16px"></div>
+      <div class="cl-actions">
+        <button class="btn" id="auToggle">Criar conta</button>
+        <button class="btn primary" id="auSubmit">Entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- meus mapas -->
+  <div id="maps" hidden>
+    <div class="card">
+      <h3>Meus mapas</h3>
+      <p class="sub">Cada mapa é independente e privado da sua conta.</p>
+      <div id="mapsList" style="max-height:340px;overflow:auto;margin:-4px 0 4px"></div>
+      <div class="cl-actions">
+        <button class="btn" id="mpClose">Fechar</button>
+        <button class="btn primary" id="mpNew">＋ Novo mapa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- gestão de usuários (admin) -->
+  <div id="users" hidden>
+    <div class="card" style="max-width:600px">
+      <h3>Gestão de usuários</h3>
+      <p class="sub">Criar, promover e remover usuários.</p>
+      <div id="usersList" style="max-height:300px;overflow:auto;margin:-4px 0 8px"></div>
+      <div style="border-top:1px solid var(--line);padding-top:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <input id="nuEmail" class="uin" placeholder="email" type="email">
+          <input id="nuName" class="uin" placeholder="nome">
+          <input id="nuPass" class="uin" placeholder="senha (mín. 6)" type="text">
+          <select id="nuRole" class="uin"><option value="user">user</option><option value="admin">admin</option></select>
+        </div>
+      </div>
+      <div class="cl-actions">
+        <button class="btn" id="usClose">Fechar</button>
+        <button class="btn primary" id="usCreate">Criar usuário</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- barra de formatação de texto (editor rico in-place) -->
+  <div id="fmt" hidden>
+    <button class="fb" data-cmd="bold" title="Negrito" style="font-weight:800">B</button>
+    <button class="fb" data-cmd="italic" title="Itálico" style="font-style:italic">I</button>
+    <button class="fb" data-cmd="underline" title="Sublinhado" style="text-decoration:underline">U</button>
+    <span class="fsep"></span>
+    <button class="fb" data-size="13px" title="Pequeno" style="font-size:11px">A</button>
+    <button class="fb" data-size="17px" title="Normal" style="font-size:14px">A</button>
+    <button class="fb" data-size="24px" title="Grande" style="font-size:18px">A</button>
+    <button class="fb" data-size="34px" title="Enorme" style="font-size:22px">A</button>
+    <span class="fsep"></span>
+    <input type="color" id="fmtColor" title="Cor do texto" value="#0a84ff">
+    <span class="fsep"></span>
+    <button class="fb" data-link="1" title="Inserir / editar link">🔗</button>
+    <button class="fb" data-clear="1" title="Limpar formatação">⌫</button>
+  </div>
+
+  <!-- menu da conta -->
+  <div id="userMenu" hidden>
+    <div class="card" style="max-width:380px">
+      <h3 id="umName">Conta</h3>
+      <p class="sub" id="umEmail"></p>
+      <div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px">Trocar senha</div>
+        <label class="fld">Senha atual<input id="pwCur" type="password" autocomplete="current-password"></label>
+        <label class="fld">Nova senha (mín. 6)<input id="pwNew" type="password" autocomplete="new-password"></label>
+        <div id="pwMsg" class="sub" style="min-height:14px"></div>
+        <button class="btn" id="pwSave">Trocar senha</button>
+      </div>
+      <div class="cl-actions">
+        <button class="btn" id="umClose">Fechar</button>
+        <button class="btn primary" id="umLogout">Sair</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- paleta de busca central (Cmd/Ctrl+K) -->
+  <div id="palette" hidden>
+    <div class="pal-card">
+      <input id="palQ" placeholder="🔎 Buscar nós…" autocomplete="off" spellcheck="false">
+      <div id="palRes"></div>
+    </div>
+  </div>
+
+<script>window.__MINDMAP_API__=null; /*__CLOUD_CONFIG__*/</script>
+<script src="vendor/MindElixir.iife.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   MindMap — editor offline. Motor: Mind-Elixir (MIT) = CRUD nativo,
+   edição inline, drag-reparent, undo/redo, context-menu, toolbar.
+   Camada própria: autosave (localStorage), nome do doc, import/export
+   .md (e-mail) e .json, novo mapa.
+===================================================================== */
+const LS="mindmap.data.v4", LS_NAME="mindmap.name.v4";
+let rc=1;
+const rid=()=>"me"+(rc++).toString(36)+(performance.now()|0).toString(36);
+
+function fresh(){
+  return { nodeData:{ id:rid(), topic:"Tópico Central", children:[
+    {id:rid(),topic:"Ideia 1",children:[]},
+    {id:rid(),topic:"Ideia 2",children:[]},
+    {id:rid(),topic:"Ideia 3",children:[]} ]}};
+}
+function loadData(){
+  try{ const s=localStorage.getItem(LS); if(s){ const d=JSON.parse(s); if(d&&d.nodeData) return d; } }catch(e){}
+  return fresh();
+}
+
+/* ---------- Mind-Elixir ----------
+   IIFE expõe namespace; construtor fica em .default. Constantes (SIDE…) no namespace. */
+const ME = window.MindElixir.default || window.MindElixir;
+const SIDE = (window.MindElixir.SIDE !== undefined) ? window.MindElixir.SIDE : 2;
+const mind = new ME({
+  el:"#map",
+  direction: SIDE,
+  draggable:true, contextMenu:true, toolBar:true, keypress:true, allowUndo:true,
+  overflowHidden:false,
+});
+mind.init(loadData());
+mind.bus.addListener("operation", ()=>{ debSave(); decorate(); renderTodo(); });
+
+const mapEl=document.getElementById("map");
+
+/* duplo-clique p/ editar (editor rico) */
+mapEl.addEventListener("dblclick", (e)=>{
+  if(e.target.closest(".mm-cb")) return;
+  const tpc = e.target.closest("me-tpc"); if(!tpc) return;
+  e.preventDefault();
+  try{ mind.selectNode(tpc); beginRichEdit(tpc); }catch(err){ console.warn(err); }
+});
+
+/* ---------- checkbox: [] / [ ] -> vazio, [x] -> marcado ---------- */
+const CB_RE=/^\s*\[( |x|X)?\]\s?/;
+let decorating=false;
+const SVGNS="http://www.w3.org/2000/svg";
+function drawJunctions(){
+  mapEl.querySelectorAll("svg.lines, svg.subLines").forEach(svg=>{
+    svg.querySelectorAll("circle.mm-jx").forEach(c=>c.remove());
+    const seen=new Set();
+    svg.querySelectorAll("path").forEach(pth=>{
+      const m=/M\s*([-\d.]+)[ ,]+([-\d.]+)/.exec(pth.getAttribute("d")||""); if(!m) return;
+      const key=Math.round(+m[1])+","+Math.round(+m[2]); if(seen.has(key)) return; seen.add(key);
+      const c=document.createElementNS(SVGNS,"circle");
+      c.setAttribute("class","mm-jx"); c.setAttribute("cx",m[1]); c.setAttribute("cy",m[2]); c.setAttribute("r","4");
+      c.setAttribute("stroke", pth.getAttribute("stroke")||"#9aa0a6");
+      svg.appendChild(c);
+    });
+  });
+}
+function decorate(){
+  if(decorating) return; decorating=true; cbObs.disconnect();
+  let cbChanged=false;
+  try{
+    mapEl.querySelectorAll("me-tpc").forEach(tpc=>{
+      const obj=tpc.nodeObj, span=tpc.querySelector("span.text"); if(!obj||!span) return;
+      const topic=obj.topic||"";
+      const editing = span.getAttribute("contenteditable")==="true";
+      if(editing){
+        // durante edição: mostrar marcador cru, remover checkbox (1x)
+        const cb=tpc.querySelector(".mm-cb"); if(cb) cb.remove();
+        if(!tpc.dataset.cbEdit){
+          if(span.textContent!==topic){ span.textContent=topic;
+            const r=document.createRange(); r.selectNodeContents(span);
+            const s=getSelection(); s.removeAllRanges(); s.addRange(r); }
+          tpc.dataset.cbEdit="1";
+        }
+        delete tpc.dataset.cbSig;
+        return;
+      }
+      delete tpc.dataset.cbEdit;
+      const m=CB_RE.exec(topic);
+      const state=m?(/x/i.test(m[1]||"")?"on":"off"):"none";
+      const sig=state+"|"+topic;
+      if(tpc.dataset.cbSig===sig) return;
+      cbChanged=true;   // tamanho do nó muda (marcador↔checkbox) -> realinhar linhas
+      const old=tpc.querySelector(".mm-cb"); if(old) old.remove();
+      if(state!=="none"){
+        span.textContent=topic.replace(CB_RE,"");
+        const box=document.createElement("span");
+        box.className="mm-cb"+(state==="on"?" on":"");
+        box.setAttribute("contenteditable","false");
+        box.title="Marcar / desmarcar";
+        tpc.insertBefore(box, span);
+        tpc.classList.add("has-cb");
+      } else { tpc.classList.remove("has-cb"); if(span.textContent!==topic) span.textContent=topic; }
+      tpc.dataset.cbSig=sig;
+    });
+    if(cbChanged){ try{ mind.linkDiv(); }catch(e){} }  // redesenha linhas p/ os tamanhos atuais dos nós
+    drawJunctions();   // bolinha no cruzamento das linhas
+  } finally { decorating=false; cbObs.observe(mapEl,{childList:true,subtree:true,characterData:true}); }
+}
+/* toggle no checkbox — em pointerdown (captura) p/ bloquear seleção/drag do ME */
+function toggleCb(box){
+  const tpc=box.closest("me-tpc"), obj=tpc&&tpc.nodeObj; if(!obj) return;
+  const m=CB_RE.exec(obj.topic||""); if(!m) return;
+  const on=/x/i.test(m[1]||""), rest=(obj.topic||"").replace(CB_RE,"");
+  try{ mind.setNodeTopic(tpc,(on?"[] ":"[x] ")+rest); }catch(err){}
+  delete tpc.dataset.cbSig; decorate(); save(); renderTodo();
+}
+["pointerdown","mousedown"].forEach(ev=>
+  mapEl.addEventListener(ev,(e)=>{ const box=e.target.closest&&e.target.closest(".mm-cb");
+    if(box){ e.stopPropagation(); e.preventDefault(); if(ev==="pointerdown") toggleCb(box); } }, true));
+/* reaplica decoração a cada re-render do mapa */
+const cbObs=new MutationObserver(()=>{ clearTimeout(cbObs._t); cbObs._t=setTimeout(decorate,30); });
+cbObs.observe(mapEl,{childList:true,subtree:true,characterData:true});
+decorate();
+
+/* ---------- sidebar TODO ---------- */
+const escH=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+const isUnchecked=t=>{ const m=CB_RE.exec(t||""); return m && !/x/i.test(m[1]||""); };
+const stripCb=t=>(t||"").replace(CB_RE,"");
+const todoBody=document.getElementById("todoBody");
+
+/* extrai data DD/MM ou DD/MM/AAAA (última ocorrência válida) do texto */
+function parseDue(text){
+  const re=/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g; let m,last=null;
+  while((m=re.exec(text))){ const d=+m[1],mo=+m[2]; if(d>=1&&d<=31&&mo>=1&&mo<=12) last={idx:m.index,len:m[0].length,d,mo,y:m[3]}; }
+  if(!last) return {label:text.trim(),date:null,display:""};
+  const now=new Date(); const y=last.y? (last.y.length<=2? 2000+ +last.y : +last.y) : now.getFullYear();
+  const date=new Date(y,last.mo-1,last.d);
+  const pad=n=>String(n).padStart(2,"0");
+  const display=pad(last.d)+"/"+pad(last.mo)+(last.y? "/"+y : "");
+  const label=(text.slice(0,last.idx)+text.slice(last.idx+last.len)).replace(/\s+/g," ").trim();
+  return {label,date,display};
+}
+function dueClass(date){ if(!date) return "";
+  const t=new Date(); t.setHours(0,0,0,0); const d=new Date(date); d.setHours(0,0,0,0);
+  if(d<t) return "over"; if(d.getTime()===t.getTime()) return "today"; return ""; }
+
+function renderTodo(){
+  let data; try{ data=mind.getData().nodeData; }catch(e){ return; }
+  const sections=data.children||[];
+  let html="", total=0;
+  const collect=(n,arr)=>{ if(isUnchecked(n.topic)){ const due=parseDue(stripCb(n.topic));
+      arr.push({id:n.id,label:due.label,date:due.date,display:due.display}); }
+    (n.children||[]).forEach(c=>collect(c,arr)); };
+  const byDate=(a,b)=>{ if(a.date&&b.date) return a.date-b.date; if(a.date) return -1; if(b.date) return 1; return 0; };
+  const rootArr=[]; if(isUnchecked(data.topic)){ const due=parseDue(stripCb(data.topic));
+    rootArr.push({id:data.id,label:due.label,date:due.date,display:due.display}); }
+  const buildSec=(title,items)=>{ if(!items.length) return "";
+    total+=items.length; items.sort(byDate);
+    return `<div class="todo-sec"><div class="todo-sec-h"><span>${escH(title)}</span><span class="c">${items.length}</span></div>`+
+      items.map(it=>`<div class="todo-item" data-id="${it.id}"><span class="todo-box" data-id="${it.id}" title="Concluir"></span>`+
+        `<span class="todo-lbl">${escH(it.label)}</span>`+
+        (it.display?`<span class="todo-date ${dueClass(it.date)}">${escH(it.display)}</span>`:"")+
+        `</div>`).join("")+`</div>`; };
+  html+=buildSec("Geral",rootArr);
+  sections.forEach(sec=>{ const arr=[]; collect(sec,arr); html+=buildSec(stripCb(sec.topic)||"(sem título)",arr); });
+  todoBody.innerHTML = html || `<div class="todo-empty">Nenhuma tarefa pendente 🎉<br><br>Crie nós começando com <b>[]</b> para virarem tarefas.<br>Adicione <b>DD/MM</b> no fim p/ prazo.</div>`;
+  document.getElementById("todoTotal").textContent=total;
+  const badge=document.getElementById("todoBadge"); badge.textContent = total? "("+total+")" : "";
+}
+function setTopicById(id,nt){
+  const ele=mind.findEle(id);
+  if(ele){ try{ mind.setNodeTopic(ele,nt); }catch(e){} }
+  else { const d=mind.getData(); (function w(n){ if(n.id===id){ n.topic=nt; return true; }
+    return (n.children||[]).some(w); })(d.nodeData); mind.refresh(d); recenter(); }
+  save(); decorate(); renderTodo();
+}
+function getTopicById(id){ const ele=mind.findEle(id); if(ele) return ele.nodeObj.topic;
+  let r=null; (function w(n){ if(n.id===id){ r=n.topic; return true; } return (n.children||[]).some(w); })(mind.getData().nodeData); return r; }
+function markDone(id){ setTopicById(id, "[x] "+stripCb(getTopicById(id)||"")); }  // preserva data
+function pathToNode(n,id,acc){ acc.push(n); if(n.id===id) return acc;
+  for(const c of (n.children||[])){ const r=pathToNode(c,id,acc); if(r) return r; } acc.pop(); return null; }
+function findEleSafe(id){ try{ return mind.findEle(id); }catch(e){ return null; } }  // findEle LANÇA se não achar
+function sel(e){ try{ mind.selectNode(e); mind.scrollIntoView(e,true); }catch(err){} }
+function focusNode(id){
+  const e0=findEleSafe(id); if(e0){ sel(e0); return; }
+  const path=pathToNode(mind.getData().nodeData,id,[]); if(!path) return;
+  // expande a subárvore do 1º ancestral recolhido (revela todos os descendentes)
+  for(const a of path){ const ae=findEleSafe(a.id);
+    if(ae && ae.nodeObj && ae.nodeObj.expanded===false){ try{ mind.expandNodeAll(ae,true); }catch(e){} break; } }
+  setMapTheme();
+  setTimeout(()=>{ const e=findEleSafe(id); if(e) sel(e); save(); }, 140);
+}
+
+todoBody.addEventListener("click",(e)=>{
+  const box=e.target.closest(".todo-box");
+  if(box){ e.stopPropagation(); markDone(box.dataset.id); return; }
+  const item=e.target.closest(".todo-item"); if(item) focusNode(item.dataset.id);
+});
+
+document.getElementById("btnTodo").onclick=()=>{ document.body.classList.toggle("todo-open");
+  setTimeout(()=>{ try{ mind.toCenter(); }catch(e){} },220); };
+
+document.body.classList.add("todo-open");   // abre por padrão
+renderTodo();
+
+/* ---------- persistência ---------- */
+const $=id=>document.getElementById(id);
+let st=null;
+function save(){
+  try{ localStorage.setItem(LS, mind.getDataString());
+    localStorage.setItem(LS_NAME, $("docname").value||"Minhas Notas"); }
+  catch(e){ if(e&&(e.name==="QuotaExceededError"||/quota/i.test(e.message||""))) warnQuota(); }
+  apiSave();   // grava o mapa atual na conta (nuvem), se logado
+  flash();
+}
+function warnQuota(){ clearTimeout(warnQuota._t);
+  warnQuota._t=setTimeout(()=>alert("Armazenamento local cheio — imagens grandes demais. "+
+    "Exporte para .json e remova imagens não essenciais."),50); }
+function docJSON(){ return JSON.stringify(Object.assign({name:($("docname").value||"Minhas Notas")}, mind.getData()), null, 2); }
+
+/* ---------- imagens nos nós ---------- */
+const IMG_CAP=720;       // maior lado armazenado (px)
+const IMG_DISP=240;      // largura exibida no nó (px)
+function attachImage(file){
+  const tpc=mind.currentNode;
+  if(!tpc){ alert("Selecione um nó antes (clique nele), depois cole/insira a imagem."); return; }
+  if(!file||!file.type.startsWith("image/")){ alert("Arquivo não é imagem."); return; }
+  const fr=new FileReader();
+  fr.onload=()=>{ const img=new Image();
+    img.onload=()=>{
+      let w=img.naturalWidth,h=img.naturalHeight;
+      const s=Math.min(1,IMG_CAP/Math.max(w,h)), cw=Math.round(w*s), ch=Math.round(h*s);
+      const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+      cv.getContext("2d").drawImage(img,0,0,cw,ch);
+      const url=cv.toDataURL("image/jpeg",0.85);
+      const dw=Math.min(cw,IMG_DISP), dh=Math.round(ch*dw/cw);
+      mind.reshapeNode(tpc,{image:{url,width:dw,height:dh}});  // dispara autosave
+    };
+    img.onerror=()=>alert("Não consegui ler a imagem.");
+    img.src=fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+/* colar do clipboard */
+document.addEventListener("paste",(e)=>{
+  const items=e.clipboardData&&e.clipboardData.items; if(!items) return;
+  for(const it of items){ if(it.type.startsWith("image/")){ e.preventDefault(); attachImage(it.getAsFile()); return; } }
+});
+/* botão: add via arquivo OU remover se nó já tem imagem */
+$("btnImg").onclick=()=>{
+  const tpc=mind.currentNode;
+  if(tpc&&tpc.nodeObj&&tpc.nodeObj.image){
+    if(confirm("Remover imagem deste nó?")) mind.reshapeNode(tpc,{image:undefined});
+    return;
+  }
+  $("imgfile").click();
+};
+$("imgfile").addEventListener("change",ev=>{ const f=ev.target.files[0]; if(f) attachImage(f); ev.target.value=""; });
+function debSave(){ clearTimeout(st); st=setTimeout(save,300); }
+function flash(){ const s=$("saved"); s.textContent="✓ salvo"; clearTimeout(flash._t);
+  flash._t=setTimeout(()=>s.textContent="",1300); }
+
+/* ---------- Markdown <-> data ---------- */
+function dataToMd(data){
+  const r=data.nodeData; let out="# "+(r.topic||"Mapa")+"\n\n";
+  (function w(kids,d){ (kids||[]).forEach(n=>{ out+="  ".repeat(d)+"- "+(n.topic||"")+"\n";
+    if(n.children&&n.children.length) w(n.children,d+1); }); })(r.children,0);
+  return out;
+}
+function mdToData(md){
+  const lines=md.split(/\r?\n/); let root=null; const stack=[]; let m;
+  const node=t=>({id:rid(),topic:t,children:[]});
+  for(const raw of lines){ if(!raw.trim())continue;
+    if((m=raw.match(/^(#{1,6})\s+(.*)$/))){ const t=m[2].trim();
+      if(!root){ root=node(t); stack.length=0; stack.push({n:root,ind:-1}); }
+      else{ const n=node(t); root.children.push(n); stack.length=0; stack.push({n:root,ind:-1}); stack.push({n,ind:0}); }
+      continue; }
+    if((m=raw.match(/^(\s*)[-*+]\s+(.*)$/))){ const ind=m[1].replace(/\t/g,"  ").length, n=node(m[2].trim());
+      if(!root){ root=node("Mapa"); stack.push({n:root,ind:-1}); }
+      while(stack.length>1 && stack[stack.length-1].ind>=ind) stack.pop();
+      stack[stack.length-1].n.children.push(n); stack.push({n,ind}); } }
+  return { nodeData: root||node("Mapa") };
+}
+
+/* ---------- import de SVG (mindmap do Miro) ---------- */
+function svgToData(svgText){
+  const doc=new DOMParser().parseFromString(svgText,"image/svg+xml");
+  const rootEl=doc.documentElement;
+  const numsRe=/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g;
+  const pT=s=>{ let tx=0,ty=0,sx=1,sy=1; if(s){ let m=/translate\(\s*([-\d.eE]+)[ ,]+([-\d.eE]+)/.exec(s);
+    if(m){tx=+m[1];ty=+m[2];} m=/scale\(\s*([-\d.eE]+)(?:[ ,]+([-\d.eE]+))?/.exec(s);
+    if(m){sx=+m[1];sy=m[2]!==undefined?+m[2]:sx;} } return [tx,ty,sx,sy]; };
+  const comp=(p,c)=>[p[0]+p[2]*c[0], p[1]+p[3]*c[1], p[2]*c[2], p[3]*c[3]];
+  const ap=(x,y,t)=>[x*t[2]+t[0], y*t[3]+t[1]];
+  const rects={}, texts={}, edges=[];
+  (function walk(el,tf,wid){
+    const t2=comp(tf,pT(el.getAttribute&&el.getAttribute("transform")));
+    const tag=el.localName;
+    if(tag==="g" && el.getAttribute("data-widget-id")) wid=el.getAttribute("data-widget-id");
+    if(tag==="rect"){
+      const w=parseFloat(el.getAttribute("width")),h=parseFloat(el.getAttribute("height")),
+            x=parseFloat(el.getAttribute("x")||0),y=parseFloat(el.getAttribute("y")||0);
+      if(isFinite(w)&&isFinite(h)&&isFinite(x)&&isFinite(y)){
+        const a=ap(x,y,t2),b=ap(x+w,y+h,t2);
+        (rects[wid]=rects[wid]||[]).push([Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.abs((b[0]-a[0])*(b[1]-a[1]))]);
+      }
+    } else if(tag==="text"){
+      const s=(el.textContent||"").trim();
+      if(s){ const p=ap(parseFloat(el.getAttribute("x")||0),parseFloat(el.getAttribute("y")||0),t2);
+        const fw=el.getAttribute("font-weight")||"";
+        (texts[wid]=texts[wid]||[]).push([p[1],p[0],s,(fw==="bold"||+fw>=600)]); }
+    } else if(tag==="path"){
+      const d=el.getAttribute("d")||"", seg=(d.match(numsRe)||[]).map(Number);
+      if(seg.length>=4) edges.push([ap(seg[0],seg[1],t2), ap(seg[seg.length-2],seg[seg.length-1],t2)]);
+    }
+    for(const c of el.children) walk(c,t2,wid);
+  })(rootEl,[0,0,1,1],null);
+
+  const nodes=[];
+  for(const wid in texts){ const rs=rects[wid]; if(!rs)continue;
+    const ts=texts[wid].slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+    const bold=ts.filter(t=>t[3]), title=(bold.length?bold:[ts[0]]).map(t=>t[2]).join(" ");
+    const descArr=ts.filter(t=>bold.length?!t[3]:t!==ts[0]).map(t=>t[2]);
+    const clean=s=>s.replace(/\s+/g," ").replace(/ /g," ").replace(/​/g,"").trim();
+    const topic=clean(title); if(!topic)continue;
+    const big=rs.reduce((m,r)=>r[4]>m[4]?r:m); if(big[4]<50)continue;
+    nodes.push({id:wid,topic,desc:clean(descArr.join(" ")),
+      x0:big[0],y0:big[1],x1:big[2],y1:big[3],cx:(big[0]+big[2])/2,cy:(big[1]+big[3])/2});
+  }
+  if(!nodes.length) throw new Error("Nenhum nó encontrado no SVG.");
+  const byid={}; nodes.forEach(n=>byid[n.id]=n);
+  const near=p=>{ let best=null,bd=1e18; for(const n of nodes){
+    const dx=Math.max(n.x0-p[0],0,p[0]-n.x1), dy=Math.max(n.y0-p[1],0,p[1]-n.y1), d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=n;} } return [best,Math.sqrt(bd)]; };
+  const adj={}; nodes.forEach(n=>adj[n.id]=new Set());
+  for(const[a,b]of edges){ const[na,da]=near(a),[nb,db]=near(b);
+    const span=Math.hypot(a[0]-b[0],a[1]-b[1]);
+    if(na&&nb&&na.id!==nb.id&&da<200&&db<200&&span>15){ adj[na.id].add(nb.id); adj[nb.id].add(na.id); } }
+  let root=nodes.find(n=>n.topic.toLowerCase().startsWith("felipe duarte"))
+        || nodes.reduce((m,n)=>n.cx<m.cx?n:m);
+  const seen=new Set([root.id]);
+  const mk=n=>{ const o={id:rid(),topic:n.topic,children:[]};
+    if(n.desc) o.children.push({id:rid(),topic:n.desc,children:[]});
+    const kids=[...adj[n.id]].filter(k=>!seen.has(k)); kids.forEach(k=>seen.add(k));
+    kids.sort((a,b)=>byid[a].cy-byid[b].cy);
+    kids.forEach(k=>o.children.push(mk(byid[k]))); return o; };
+  const data={nodeData:mk(root)};
+  nodes.filter(n=>!seen.has(n.id)).forEach(n=>{ seen.add(n.id); data.nodeData.children.push(mk(n)); });
+  return data;
+}
+
+/* ---------- barra: nome / import / export / e-mail / novo ---------- */
+const nameEl=$("docname");
+try{ nameEl.value=localStorage.getItem(LS_NAME)||"Minhas Notas"; }catch(e){}
+nameEl.addEventListener("input",debSave);
+
+function safeName(){ return (nameEl.value||"mindmap").replace(/[^\w\-À-ÿ ]+/g,"").trim().replace(/\s+/g,"_")||"mindmap"; }
+function download(text,ext,mime){ const b=new Blob([text],{type:mime}),u=URL.createObjectURL(b),a=document.createElement("a");
+  a.href=u; a.download=safeName()+ext; a.click(); URL.revokeObjectURL(u); }
+
+$("btnExportMd").onclick=()=>download(dataToMd(mind.getData()),".md","text/markdown");
+$("btnExportJson").onclick=()=>download(docJSON(),".json","application/json");
+
+/* ---------- tema claro/escuro ---------- */
+const LS_THEME="mindmap.theme.v4";
+let themePref="light";
+function setMapTheme(){ const dark=themePref==="dark";
+  try{ mind.changeTheme(dark? window.MindElixir.DARK_THEME : window.MindElixir.THEME, true); }catch(e){}
+  document.body.classList.toggle("dark", dark);
+  $("btnTheme").textContent = dark? "☀️ Claro" : "🌙 Escuro";
+  const mt=$("miTheme"); if(mt) mt.textContent = dark? "☀️ Tema claro" : "🌙 Tema escuro";
+}
+function applyTheme(t){ themePref=t; setMapTheme(); try{ localStorage.setItem(LS_THEME,t); }catch(e){} }
+
+/* reaplica tema após qualquer refresh (mind.refresh reseta p/ o tema default do ME) */
+function recenter(){ setTimeout(()=>{ setMapTheme(); try{ mind.toCenter(); }catch(e){} renderTodo(); },60); }
+$("btnNew").onclick=async()=>{
+  if(API && token){
+    try{ const m=await apiJSON("POST","/maps",{title:"Novo mapa"}); await loadMapList(); nameEl.value=m.title; await openMap(m.id); }
+    catch(e){ alert("Falha ao criar mapa: "+e.message); } return;
+  }
+  if(!confirm("Criar novo mapa? (modo local)"))return; mind.refresh(fresh()); save(); recenter();
+};
+
+$("btnImport").onclick=()=>$("file").click();
+$("file").addEventListener("change",ev=>{ const f=ev.target.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=()=>{ try{ const txt=r.result; let data; const nm=f.name.toLowerCase();
+      if(nm.endsWith(".json")){ data=JSON.parse(txt); if(!data.nodeData)throw 0; if(data.name) nameEl.value=data.name; }
+      else if(nm.endsWith(".svg")){ data=svgToData(txt); nameEl.value=f.name.replace(/\.svg$/i,"")||nameEl.value; }
+      else { data=mdToData(txt); nameEl.value=f.name.replace(/\.(md|markdown)$/i,"")||nameEl.value; }
+      mind.refresh(data); save(); recenter();
+    }catch(e){ alert("Não consegui importar: "+(e.message||e)); } };
+  r.readAsText(f); ev.target.value=""; });
+
+/* ---------- modal de atalhos (?) ---------- */
+const helpEl=document.getElementById("help");
+const helpOpen=()=>!helpEl.hidden;
+const showHelp=v=>{ helpEl.hidden=!v; };
+document.getElementById("helpBtn").onclick=()=>showHelp(true);
+helpEl.addEventListener("click",e=>{ if(e.target===helpEl) showHelp(false); }); // clique no fundo fecha
+document.addEventListener("keydown",(e)=>{
+  const t=(e.target.tagName||"").toLowerCase();
+  const typing = t==="input"||t==="textarea"||e.target.isContentEditable;
+  if(e.key==="?" && !typing){ e.preventDefault(); showHelp(!helpOpen()); }
+  else if(e.key==="Escape" && helpOpen()){ e.preventDefault(); showHelp(false); }
+});
+
+/* +/- : expande / recolhe toda a subárvore do nó selecionado (captura p/ não conflitar com ME) */
+document.addEventListener("keydown",(e)=>{
+  if(e.key!=="+" && e.key!=="-") return;
+  const t=(e.target.tagName||"").toLowerCase();
+  if(t==="input"||t==="textarea"||e.target.isContentEditable) return;
+  const el=mind.currentNode; if(!el) return;
+  e.preventDefault(); e.stopPropagation();
+  try{ mind.expandNodeAll(el, e.key==="+"); }catch(err){ console.warn(err); }
+  setMapTheme(); save(); renderTodo();
+}, true);
+
+/* editar = Shift+Enter (substitui F2); captura p/ não virar "novo irmão" do ME e bloquear F2 nativo */
+document.addEventListener("keydown",(e)=>{
+  const t=(e.target.tagName||"").toLowerCase();
+  if(t==="input"||t==="textarea"||e.target.isContentEditable) return;  // já editando/digitando
+  if(e.key==="Enter" && e.shiftKey){
+    const el=mind.currentNode; if(!el) return;
+    e.preventDefault(); e.stopPropagation();
+    try{ mind.selectNode(el); beginRichEdit(el); }catch(err){ console.warn(err); }
+  } else if(e.key==="F2"){ e.preventDefault(); e.stopPropagation(); }  // desativa F2
+}, true);
+
+/* ---------- editor de texto rico in-place (estilo/cor/tamanho, misturável) ---------- */
+let fmtNode=null, fmtEl=null;
+function beginRichEdit(tpc){
+  if(!tpc||!tpc.nodeObj) return;
+  if(fmtEl) commitRichEdit();
+  fmtNode=tpc; const obj=tpc.nodeObj;
+  const rect=tpc.getBoundingClientRect();
+  const scale = tpc.offsetWidth ? rect.width/tpc.offsetWidth : 1;
+  const inner = tpc.querySelector(".text") || tpc;
+  const cs=getComputedStyle(inner), ns=getComputedStyle(tpc);
+  let bg=ns.backgroundColor;
+  if(!bg || bg==="rgba(0, 0, 0, 0)" || bg==="transparent")
+    bg=(getComputedStyle(document.documentElement).getPropertyValue("--map-bg")||"#fff").trim();
+  const ed=document.createElement("div");
+  ed.className="rich-ed"; ed.contentEditable="true";
+  ed.innerHTML = obj.dangerouslySetInnerHTML || escH(obj.topic||"");
+  Object.assign(ed.style,{ position:"fixed", left:rect.left+"px", top:rect.top+"px",
+    minWidth:tpc.offsetWidth+"px", maxWidth:"360px", transformOrigin:"top left", transform:`scale(${scale})`,
+    font:cs.font, color:cs.color, lineHeight:cs.lineHeight, padding:ns.padding,
+    background:bg, borderRadius:ns.borderRadius, zIndex:55,
+    boxShadow:"0 0 0 2px var(--accent), 0 6px 20px rgba(0,0,0,.18)", whiteSpace:"pre-wrap" });
+  document.body.appendChild(ed); fmtEl=ed;
+  tpc.style.visibility="hidden";   // esconde o nó atrás (evita vazar texto antigo)
+  ed.focus(); try{ document.execCommand("selectAll",false,null); }catch(e){}
+  // barra acima do nó
+  const bar=$("fmt"); bar.hidden=false;
+  const bw=bar.offsetWidth||300;
+  bar.style.left=Math.max(8, Math.min(window.innerWidth-bw-8, rect.left))+"px";
+  bar.style.top=Math.max(8, rect.top-46)+"px";
+  ed.addEventListener("keydown",(e)=>{
+    if(e.key==="Escape"){ e.preventDefault(); cancelRichEdit(); }
+    else if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); commitRichEdit(); }
+    e.stopPropagation();
+  });
+}
+function closeEd(){ if(fmtNode) fmtNode.style.visibility=""; if(fmtEl){ fmtEl.remove(); fmtEl=null; } fmtNode=null; $("fmt").hidden=true; }
+function cancelRichEdit(){ closeEd(); }
+function commitRichEdit(){
+  if(!fmtNode||!fmtEl) return;
+  const html=fmtEl.innerHTML.trim(), plain=fmtEl.innerText.replace(/ /g," ").trim();
+  const hasFmt=/<(a|b|strong|i|em|u|span|font|br)\b/i.test(html);
+  const node=fmtNode; closeEd();
+  try{ mind.reshapeNode(node, hasFmt ? {topic:plain, dangerouslySetInnerHTML:html}
+                                     : {topic:plain, dangerouslySetInnerHTML:undefined}); }catch(e){ console.warn(e); }
+  save(); decorate(); renderTodo();
+}
+/* barra: aplica nos trechos selecionados (mousedown preventDefault mantém a seleção) */
+$("fmt").addEventListener("mousedown",(e)=>{ if(e.target.id!=="fmtColor") e.preventDefault(); });
+$("fmt").addEventListener("click",(e)=>{
+  const b=e.target.closest(".fb"); if(!b||!fmtEl) return; fmtEl.focus();
+  if(b.dataset.cmd){ document.execCommand(b.dataset.cmd,false,null); }
+  else if(b.dataset.size){ document.execCommand("fontSize",false,"7");
+    fmtEl.querySelectorAll('font[size="7"]').forEach(f=>{ const s=document.createElement("span");
+      s.style.fontSize=b.dataset.size; s.innerHTML=f.innerHTML; f.replaceWith(s); }); }
+  else if(b.dataset.link){
+    const sel=getSelection(); const range=sel.rangeCount? sel.getRangeAt(0).cloneRange():null;
+    const cur=(range && range.startContainer.parentElement && range.startContainer.parentElement.closest("a"));
+    let url=prompt("Endereço do link:", cur? cur.href : "https://");
+    fmtEl.focus(); if(range){ sel.removeAllRanges(); sel.addRange(range); }
+    if(url===null) return;
+    url=url.trim();
+    if(!url){ document.execCommand("unlink",false,null); return; }   // vazio = remove link
+    if(!/^(https?:\/\/|mailto:)/i.test(url)) url="https://"+url;
+    document.execCommand("createLink",false,url);
+    fmtEl.querySelectorAll("a").forEach(a=>{ a.target="_blank"; a.rel="noopener noreferrer"; });
+  }
+  else if(b.dataset.clear){ document.execCommand("removeFormat",false,null); document.execCommand("unlink",false,null); }
+});
+$("fmtColor").addEventListener("input",(e)=>{ if(!fmtEl) return; fmtEl.focus(); document.execCommand("foreColor",false,e.target.value); });
+/* clicar fora do editor/barra confirma */
+document.addEventListener("mousedown",(e)=>{ if(!fmtEl) return;
+  if(e.target.closest(".rich-ed")||e.target.closest("#fmt")) return; commitRichEdit(); }, true);
+
+$("btnTheme").onclick=()=>applyTheme(themePref==="dark"?"light":"dark");
+applyTheme((()=>{ try{ return localStorage.getItem(LS_THEME)||"light"; }catch(e){ return "light"; } })());
+
+/* ===================================================================
+   Auth + API (login/senha, multi-mapa, gestão de usuários)
+   API injetada no deploy via window.__MINDMAP_API__. Sem API = modo local.
+=================================================================== */
+const API = (window.__MINDMAP_API__||"").replace(/\/+$/,"");
+let token = (()=>{ try{ return localStorage.getItem("mindmap.token")||""; }catch(e){ return ""; } })();
+let me = null, mapList = [], currentMapId = (()=>{ try{ return localStorage.getItem("mindmap.curmap")||""; }catch(e){ return ""; } })();
+
+async function apiJSON(method, path, bodyObj){
+  const r = await fetch(API+path, { method,
+    headers: Object.assign({ "content-type":"application/json" }, token? {authorization:"Bearer "+token}:{}),
+    body: bodyObj!==undefined? JSON.stringify(bodyObj) : undefined });
+  if(r.status===401){ doLogout(); throw new Error("sessão expirada"); }
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error || ("HTTP "+r.status));
+  return d;
+}
+/* salvar mapa atual (chamado por save()) */
+let apiBusy=false, apiAgain=false;
+async function apiSave(){
+  if(!API || !token || !currentMapId) return;
+  if(apiBusy){ apiAgain=true; return; } apiBusy=true;
+  try{ const {url}=await apiJSON("PUT","/maps/"+currentMapId+"/blob");
+    await fetch(url,{method:"PUT",headers:{"content-type":"application/json"},body:docJSON()});
+  }catch(e){ console.warn("apiSave:",e); }
+  finally{ apiBusy=false; if(apiAgain){ apiAgain=false; apiSave(); } }
+}
+async function openMap(id){
+  const {url}=await apiJSON("GET","/maps/"+id+"/blob");
+  const d=await (await fetch(url)).json();
+  mind.refresh(d); if(d.name) nameEl.value=d.name;
+  currentMapId=id; try{ localStorage.setItem("mindmap.curmap",id); localStorage.setItem(LS,mind.getDataString()); }catch(e){}
+  recenter();
+}
+async function loadMapList(){ const d=await apiJSON("GET","/maps"); mapList=d.maps||[]; return mapList; }
+
+/* renomear mapa (título no índice) ao editar o nome */
+let renT=null;
+nameEl.addEventListener("input", ()=>{ if(!API||!token||!currentMapId) return;
+  clearTimeout(renT); renT=setTimeout(async()=>{ try{ await apiJSON("PATCH","/maps/"+currentMapId,{title:nameEl.value}); }catch(e){} },500); });
+
+/* ---- gate de login ---- */
+let authMode="login";
+function showAuth(){ $("auth").hidden=false; setAuthMode("login"); setTimeout(()=>$("auEmail").focus(),50); }
+function setAuthMode(m){ authMode=m;
+  $("authSub").textContent = m==="login"? "Entre para acessar seus mapas." : "Crie sua conta.";
+  $("authNameFld").style.display = m==="login"? "none":"block";
+  $("auSubmit").textContent = m==="login"? "Entrar" : "Criar conta";
+  $("auToggle").textContent = m==="login"? "Criar conta" : "Já tenho conta";
+  $("auStatus").textContent="";
+}
+$("auToggle").onclick=()=>setAuthMode(authMode==="login"?"register":"login");
+$("auSubmit").onclick=submitAuth;
+$("auPass").addEventListener("keydown",e=>{ if(e.key==="Enter") submitAuth(); });
+async function submitAuth(){
+  const email=$("auEmail").value.trim(), password=$("auPass").value, name=$("auName").value.trim();
+  if(!email||!password){ $("auStatus").textContent="Preencha email e senha."; return; }
+  $("auStatus").textContent="…";
+  try{
+    const d = authMode==="login"
+      ? await apiJSON("POST","/auth/login",{email,password})
+      : await apiJSON("POST","/auth/register",{email,password,name});
+    if(d.pending){ $("auPass").value=""; setAuthMode("login");
+      $("auStatus").textContent="Cadastro enviado ✓ Aguarde o admin aprovar sua conta."; return; }
+    token=d.token; try{ localStorage.setItem("mindmap.token",token); }catch(e){}
+    $("auth").hidden=true; $("auPass").value="";
+    await initApp();
+  }catch(e){ $("auStatus").textContent = e.message || "Falha ao autenticar."; }
+}
+function doLogout(){ token=""; me=null; currentMapId="";
+  try{ localStorage.removeItem("mindmap.token"); localStorage.removeItem("mindmap.curmap"); }catch(e){}
+  $("userMenu").hidden=true; showAuth();
+}
+
+/* ---- conta (menu) ---- */
+$("btnUser").onclick=()=>{ if(!me) return; $("umName").textContent=me.name||me.email;
+  $("umEmail").textContent=me.email+" · "+(me.role==="admin"?"administrador":"usuário"); $("userMenu").hidden=false; };
+$("umClose").onclick=()=>$("userMenu").hidden=true;
+$("userMenu").addEventListener("click",e=>{ if(e.target===$("userMenu")) $("userMenu").hidden=true; });
+$("umLogout").onclick=doLogout;
+$("pwSave").onclick=async()=>{
+  const cur=$("pwCur").value, nw=$("pwNew").value;
+  if(!cur||!nw){ $("pwMsg").textContent="Preencha as duas senhas."; return; }
+  $("pwMsg").textContent="…";
+  try{ await apiJSON("POST","/auth/password",{current:cur,new:nw});
+    $("pwMsg").textContent="Senha trocada ✓"; $("pwCur").value=$("pwNew").value="";
+  }catch(e){ $("pwMsg").textContent=e.message||"Falha."; }
+};
+
+/* ---- meus mapas ---- */
+$("btnMaps").onclick=openMaps;
+$("mpClose").onclick=()=>$("maps").hidden=true;
+$("maps").addEventListener("click",e=>{ if(e.target===$("maps")) $("maps").hidden=true; });
+$("mpNew").onclick=async()=>{ try{ const m=await apiJSON("POST","/maps",{title:"Novo mapa"});
+  await loadMapList(); nameEl.value=m.title; await openMap(m.id); renderMaps(); }catch(e){ alert(e.message); } };
+async function openMaps(){ try{ await loadMapList(); }catch(e){ alert(e.message); return; } renderMaps(); $("maps").hidden=false; }
+function renderMaps(){
+  $("mapsList").innerHTML = mapList.length? mapList.map(m=>{
+    const cur=m.id===currentMapId?" cur":"";
+    const dt=m.updatedAt? new Date(m.updatedAt).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "";
+    return `<div class="row-item${cur}" data-id="${m.id}"><div class="grow"><div class="t">${escH(m.title||"Sem título")}</div><div class="m">${dt}</div></div>`+
+      `<button class="ico-btn" data-act="open" data-id="${m.id}">Abrir</button>`+
+      `<button class="ico-btn danger" data-act="del" data-id="${m.id}" title="Excluir">🗑</button></div>`;
+  }).join("") : `<div class="todo-empty">Nenhum mapa ainda.</div>`;
+}
+$("mapsList").addEventListener("click",async(e)=>{
+  const btn=e.target.closest("[data-act]"); const row=e.target.closest(".row-item"); if(!btn&&!row) return;
+  const id=(btn||row).dataset.id; const act=btn? btn.dataset.act : "open";
+  if(act==="open"){ try{ await openMap(id); $("maps").hidden=true; }catch(err){ alert(err.message); } }
+  else if(act==="del"){ const m=mapList.find(x=>x.id===id);
+    if(!confirm("Excluir o mapa \""+(m?.title||"")+"\"? Não dá pra desfazer."))return;
+    try{ await apiJSON("DELETE","/maps/"+id); await loadMapList();
+      if(currentMapId===id){ if(mapList[0]) await openMap(mapList[0].id);
+        else { const nm=await apiJSON("POST","/maps",{title:"Meu mapa"}); await loadMapList(); await openMap(nm.id); } }
+      renderMaps(); }catch(err){ alert(err.message); } }
+});
+
+/* ---- gestão de usuários (admin) ---- */
+$("btnUsers").onclick=openUsers;
+$("usClose").onclick=()=>$("users").hidden=true;
+$("users").addEventListener("click",e=>{ if(e.target===$("users")) $("users").hidden=true; });
+async function openUsers(){ try{ await renderUsers(); $("users").hidden=false; }catch(e){ alert(e.message); } }
+async function renderUsers(){
+  const d=await apiJSON("GET","/users");
+  const us=(d.users||[]).slice().sort((a,b)=>(a.approved===false?0:1)-(b.approved===false?0:1)); // pendentes primeiro
+  $("usersList").innerHTML = us.map(u=>{
+    const self=me&&u.email===me.email, pend=u.approved===false;
+    return `<div class="row-item"><div class="grow"><div class="t">${escH(u.name||u.email)} `+
+      `<span class="pill ${u.role==='admin'?'admin':''}">${u.role}</span>`+
+      (pend?` <span class="pill" style="background:#fff0d6;color:#b25e00">pendente</span>`:"")+
+      `</div><div class="m">${escH(u.email)}</div></div>`+
+      (pend?`<button class="ico-btn" data-act="approve" data-email="${escH(u.email)}" style="border-color:#2e7d46;color:#1d7a36">✓ Aprovar</button>`:"")+
+      `<button class="ico-btn" data-act="role" data-email="${escH(u.email)}">${u.role==='admin'?'tornar user':'tornar admin'}</button>`+
+      (self?"":`<button class="ico-btn danger" data-act="del" data-email="${escH(u.email)}" title="Remover">🗑</button>`)+`</div>`;
+  }).join("") || `<div class="todo-empty">Nenhum usuário.</div>`;
+}
+$("usersList").addEventListener("click",async(e)=>{
+  const btn=e.target.closest("[data-act]"); if(!btn) return; const email=btn.dataset.email;
+  try{
+    if(btn.dataset.act==="del"){ if(!confirm("Remover "+email+"?"))return; await apiJSON("DELETE","/users/"+encodeURIComponent(email)); }
+    else if(btn.dataset.act==="role"){ const cur=btn.textContent.includes("admin")?"admin":"user"; await apiJSON("PATCH","/users/"+encodeURIComponent(email),{role:cur}); }
+    else if(btn.dataset.act==="approve"){ await apiJSON("PATCH","/users/"+encodeURIComponent(email),{approved:true}); }
+    await renderUsers();
+  }catch(err){ alert(err.message); }
+});
+$("usCreate").onclick=async()=>{
+  const email=$("nuEmail").value.trim(), name=$("nuName").value.trim(), password=$("nuPass").value, role=$("nuRole").value;
+  if(!email||!password){ alert("email e senha obrigatórios"); return; }
+  try{ await apiJSON("POST","/users",{email,name,password,role}); $("nuEmail").value=$("nuName").value=$("nuPass").value=""; await renderUsers(); }
+  catch(e){ alert(e.message); }
+};
+
+/* ---- init pós-login ---- */
+async function initApp(){
+  me = await apiJSON("GET","/me");
+  $("btnUsers").hidden = me.role!=="admin";
+  $("btnUser").textContent = "👤 "+(me.email.split("@")[0]);
+  await loadMapList();
+  if(!mapList.length){ const m=await apiJSON("POST","/maps",{title:"Meu mapa"}); mapList=[{id:m.id,title:m.title,updatedAt:m.updatedAt}]; }
+  const open = (currentMapId && mapList.some(m=>m.id===currentMapId)) ? currentMapId : mapList[0].id;
+  await openMap(open);
+}
+
+/* ---- boot ---- */
+if(API){
+  // modo nuvem: exige login
+  if(token){ initApp().catch(()=>{ doLogout(); }); }
+  else showAuth();
+}else{
+  // modo local (arquivo offline, sem backend): some botões de conta
+  ["btnMaps","btnUsers","btnUser"].forEach(id=>{ const b=$(id); if(b) b.hidden=true; });
+}
+
+/* ---------- busca de nós ---------- */
+const norm=s=>(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+function searchNodes(q){ q=(q||"").trim(); if(!q) return [];
+  const nq=norm(q), toks=nq.split(/\s+/).filter(Boolean), out=[];
+  let root; try{ root=mind.getData().nodeData; }catch(e){ return []; }
+  (function w(n,path){ const plain=stripCb(n.topic||""), t=norm(plain);
+    if(plain && (t.includes(nq) || toks.every(tk=>t.includes(tk))))
+      out.push({id:n.id, label:plain, path, score: t.startsWith(nq)?0:(t.includes(nq)?1:2)});
+    (n.children||[]).forEach(c=>w(c, path? path+" › "+plain : plain));
+  })(root,"");
+  out.sort((a,b)=>a.score-b.score); return out.slice(0,30);
+}
+const srRow=(o,active)=>`<div class="sr${active?" sel":""}" data-id="${o.id}"><div class="t">${escH(o.label.slice(0,90))}</div>`+
+  (o.path?`<div class="m">${escH(o.path.slice(0,80))}</div>`:"")+`</div>`;
+
+const closeSearch=()=>{ $("searchRes").hidden=true; };
+function doSearch(q){ const res=$("searchRes");
+  if(!(q||"").trim()){ res.hidden=true; res.innerHTML=""; return; }
+  const list=searchNodes(q);
+  res.innerHTML = list.length? list.map(o=>srRow(o,false)).join("") : `<div class="sr-empty">Nada encontrado</div>`;
+  res.hidden=false;
+}
+$("search").addEventListener("input",e=>doSearch(e.target.value));
+$("search").addEventListener("keydown",e=>{
+  if(e.key==="Escape"){ e.target.value=""; closeSearch(); e.target.blur(); }
+  else if(e.key==="Enter"){ const f=$("searchRes").querySelector(".sr"); if(f){ focusNode(f.dataset.id); closeSearch(); } }
+  e.stopPropagation();
+});
+$("searchRes").addEventListener("mousedown",e=>{ const r=e.target.closest(".sr"); if(!r) return;
+  e.preventDefault(); focusNode(r.dataset.id); closeSearch(); });
+document.addEventListener("mousedown",e=>{ if(!e.target.closest("#searchWrap")) closeSearch(); });
+
+/* paleta central estilo Spotlight — Cmd/Ctrl+K (ou "/") */
+let palItems=[], palSel=-1;
+function openPalette(){ $("palette").hidden=false; $("palQ").value=""; palRender(""); palSel=-1; setTimeout(()=>$("palQ").focus(),30); }
+function closePalette(){ $("palette").hidden=true; }
+function palHi(){ [...$("palRes").children].forEach((c,i)=>c.classList.toggle("sel",i===palSel));
+  const el=$("palRes").children[palSel]; if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"}); }
+function palRender(q){ palItems=searchNodes(q); palSel=palItems.length?0:-1;
+  $("palRes").innerHTML = (q||"").trim()
+    ? (palItems.length? palItems.map((o,i)=>srRow(o,i===0)).join("") : `<div class="sr-empty">Nada encontrado</div>`)
+    : `<div class="sr-empty">Digite para buscar nós…</div>`;
+}
+$("palQ").addEventListener("input",e=>palRender(e.target.value));
+$("palQ").addEventListener("keydown",e=>{
+  if(e.key==="Escape"){ e.preventDefault(); closePalette(); }
+  else if(e.key==="ArrowDown"){ e.preventDefault(); if(palItems.length){ palSel=(palSel+1)%palItems.length; palHi(); } }
+  else if(e.key==="ArrowUp"){ e.preventDefault(); if(palItems.length){ palSel=(palSel-1+palItems.length)%palItems.length; palHi(); } }
+  else if(e.key==="Enter"){ e.preventDefault(); const o=palItems[palSel]; if(o){ focusNode(o.id); closePalette(); } }
+  e.stopPropagation();
+});
+$("palRes").addEventListener("mousedown",e=>{ const r=e.target.closest(".sr"); if(!r) return;
+  e.preventDefault(); focusNode(r.dataset.id); closePalette(); });
+$("palette").addEventListener("mousedown",e=>{ if(e.target===$("palette")) closePalette(); });
+document.addEventListener("keydown",e=>{
+  const t=(e.target.tagName||"").toLowerCase(), typing=(t==="input"||t==="textarea"||e.target.isContentEditable);
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); openPalette(); }
+  else if(e.key==="/" && !typing){ e.preventDefault(); openPalette(); }
+});
+
+/* ---------- expandir / recolher tudo ---------- */
+function expandAllMap(expand){
+  let root; try{ root=mind.getData().nodeData; }catch(e){ return; }
+  if(expand){ const re=findEleSafe(root.id); if(re){ try{ mind.expandNodeAll(re,true); }catch(e){} } }
+  else { (root.children||[]).forEach(c=>{ if(c.children&&c.children.length){
+    const e=findEleSafe(c.id); if(e){ try{ mind.expandNodeAll(e,false); }catch(err){} } } }); }
+  setMapTheme(); save(); setTimeout(()=>{ try{ mind.toCenter(); }catch(e){} },100);
+}
+$("btnExpand").onclick=()=>expandAllMap(true);
+$("btnCollapse").onclick=()=>expandAllMap(false);
+
+/* ---------- menus suspensos ---------- */
+document.querySelectorAll(".menu .menu-btn").forEach(btn=>{
+  btn.addEventListener("click",e=>{ e.stopPropagation(); const m=btn.parentElement, was=m.classList.contains("open");
+    document.querySelectorAll(".menu.open").forEach(x=>x.classList.remove("open")); if(!was) m.classList.add("open"); });
+});
+document.addEventListener("click",()=>document.querySelectorAll(".menu.open").forEach(x=>x.classList.remove("open")));
+const MENU_ACT={ new:"btnNew", maps:"btnMaps", import:"btnImport", expmd:"btnExportMd", expjson:"btnExportJson",
+  expand:"btnExpand", collapse:"btnCollapse", image:"btnImg", theme:"btnTheme" };
+document.querySelectorAll(".menu-list [data-act]").forEach(it=>{
+  it.addEventListener("click",e=>{ e.stopPropagation(); const id=MENU_ACT[it.dataset.act];
+    if(id&&$(id)) $(id).click(); it.closest(".menu").classList.remove("open"); });
+});
+
+window.addEventListener("beforeunload",save);
+</script>
+</body>
+</html>
