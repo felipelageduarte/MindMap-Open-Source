@@ -96,7 +96,10 @@ aws iam put-role-policy --role-name "$ROLE" --policy-name "${PROJECT}-access" --
     {\"Effect\":\"Allow\",\"Action\":[\"dynamodb:GetItem\",\"dynamodb:PutItem\",\"dynamodb:UpdateItem\",
       \"dynamodb:DeleteItem\",\"dynamodb:Query\",\"dynamodb:Scan\"],
      \"Resource\":[\"arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/${USERS_TABLE}\",
-                   \"arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/${MAPS_TABLE}\"]}
+                   \"arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/${MAPS_TABLE}\"]},
+    {\"Effect\":\"Allow\",\"Action\":[\"bedrock:InvokeModel\"],
+     \"Resource\":[\"arn:aws:bedrock:*::foundation-model/*\",
+                   \"arn:aws:bedrock:*:${ACCOUNT}:inference-profile/*\"]}
   ]}" >/dev/null
 ROLE_ARN="$(aws iam get-role --role-name "$ROLE" --query Role.Arn --output text)"
 ok "Policy aplicada."
@@ -109,25 +112,27 @@ command -v npm >/dev/null 2>&1 || { NB="$(ls -d "$HOME"/.nvm/versions/node/*/bin
 command -v npm >/dev/null 2>&1 || die "npm não encontrado (Node.js necessário p/ empacotar a Lambda)."
 printf '{"name":"api","version":"1.0.0","type":"module","private":true}\n' > "$BUILD/package.json"
 ( cd "$BUILD" && npm i --no-audit --no-fund \
-    @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/client-dynamodb @aws-sdk/util-dynamodb ) \
+    @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/client-dynamodb @aws-sdk/util-dynamodb \
+    @aws-sdk/client-bedrock-runtime ) \
   || die "npm install falhou (cheque a rede e tente de novo)."
 ( cd "$BUILD" && zip -qr function.zip api.mjs node_modules package.json ) || die "zip falhou."
 ok "Pacote pronto."
 
-LAMBDA_ENV="Variables={BUCKET=${DATA_BUCKET},ALLOW_ORIGIN=*,USERS_TABLE=${USERS_TABLE},MAPS_TABLE=${MAPS_TABLE},JWT_SECRET=${JWT_SECRET}}"
+BEDROCK_MODEL="${BEDROCK_MODEL:-us.anthropic.claude-sonnet-4-6}"
+LAMBDA_ENV="Variables={BUCKET=${DATA_BUCKET},ALLOW_ORIGIN=*,USERS_TABLE=${USERS_TABLE},MAPS_TABLE=${MAPS_TABLE},JWT_SECRET=${JWT_SECRET},BEDROCK_MODEL=${BEDROCK_MODEL}}"
 if aws lambda get-function --function-name "$FUNC" >/dev/null 2>&1; then
   log "Atualizando Lambda existente..."
   aws lambda update-function-code --function-name "$FUNC" \
     --zip-file "fileb://$BUILD/function.zip" >/dev/null
   aws lambda wait function-updated --function-name "$FUNC"
   aws lambda update-function-configuration --function-name "$FUNC" \
-    --handler api.handler --runtime nodejs20.x --timeout 15 \
+    --handler api.handler --runtime nodejs20.x --timeout 60 \
     --environment "$LAMBDA_ENV" >/dev/null
   aws lambda wait function-updated --function-name "$FUNC"
 else
   log "Criando Lambda: $FUNC"
   aws lambda create-function --function-name "$FUNC" \
-    --runtime nodejs20.x --handler api.handler --timeout 15 \
+    --runtime nodejs20.x --handler api.handler --timeout 60 \
     --role "$ROLE_ARN" --zip-file "fileb://$BUILD/function.zip" \
     --environment "$LAMBDA_ENV" --region "$REGION" >/dev/null
   aws lambda wait function-active --function-name "$FUNC"

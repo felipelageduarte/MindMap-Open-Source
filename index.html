@@ -127,13 +127,32 @@
   @media(max-width:560px){ #help .grid{grid-template-columns:1fr} }
 
   /* modais (auth / mapas / usuários / conta) */
-  #auth[hidden],#maps[hidden],#users[hidden],#userMenu[hidden]{display:none}
-  #auth,#maps,#users,#userMenu{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  #auth[hidden],#maps[hidden],#users[hidden],#userMenu[hidden],#ai[hidden]{display:none}
+  #auth,#maps,#users,#userMenu,#ai{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
     background:rgba(0,0,0,.38);backdrop-filter:blur(3px);animation:fade .12s ease}
-  #auth .card,#maps .card,#users .card,#userMenu .card{background:#fff;border-radius:16px;padding:24px 28px;
+  #auth .card,#maps .card,#users .card,#userMenu .card,#ai .card{background:#fff;border-radius:16px;padding:24px 28px;
     max-width:440px;width:calc(100% - 48px);box-shadow:0 20px 60px rgba(0,0,0,.3)}
-  #auth h3,#maps h3,#users h3,#userMenu h3{margin:0 0 4px;font-size:19px}
-  #auth .sub,#maps .sub,#users .sub,#userMenu .sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+  #auth h3,#maps h3,#users h3,#userMenu h3,#ai h3{margin:0 0 4px;font-size:19px}
+  #auth .sub,#maps .sub,#users .sub,#userMenu .sub,#ai .sub{margin:0 0 16px;color:var(--muted);font-size:13px}
+  #ai .card{max-width:640px;width:calc(100% - 48px)}
+  #aiText{display:block;width:100%;box-sizing:border-box;min-height:120px;resize:vertical;font:inherit;font-size:13.5px;
+    padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fafafa;color:#1d1d1f}
+  #aiText:focus{outline:none;border-color:var(--accent);background:#fff}
+  #aiSummary{font-size:13px;color:var(--muted);margin:12px 0 6px;min-height:16px}
+  #aiOps{max-height:300px;overflow:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:4px}
+  .ai-row{display:grid;grid-template-columns:auto 1fr;align-items:start;gap:8px;padding:7px 9px;border:1px solid var(--line);
+    border-radius:9px;font-size:13px;cursor:pointer}
+  .ai-row:hover{background:#f6f6f8}
+  .ai-row input{margin-top:2px}
+  .ai-row.del{border-color:#e3b3b3;background:#fdf3f3}
+  .ai-row.del span{color:#b3261e}
+  .ai-why{grid-column:2;color:var(--muted);font-style:normal;font-size:11.5px;display:block;margin-top:1px}
+  body.dark #ai .card{background:#242426;color:#e8e8ea}
+  body.dark #ai .sub,body.dark #aiSummary{color:#aaa}
+  body.dark #aiText{background:#2c2c30;border-color:#3a3a40;color:#e8e8ea}
+  body.dark .ai-row{border-color:#3a3a40}
+  body.dark .ai-row:hover{background:#3a3a40}
+  body.dark .ai-row.del{border-color:#5a2b2b;background:#3a2626} body.dark .ai-row.del span{color:#ff9b91}
   .fld{display:block;font-size:12.5px;color:#444;margin-bottom:12px}
   .fld input{display:block;width:100%;margin-top:5px;font:inherit;font-size:13.5px;padding:9px 11px;
     border:1px solid var(--line);border-radius:8px;background:#fafafa}
@@ -257,6 +276,8 @@
         <button data-act="expand">⊕ Expandir tudo</button>
         <button data-act="collapse">⊖ Recolher tudo</button>
         <hr>
+        <button data-act="ai">🤖 Atualizar pela reunião</button>
+        <hr>
         <button data-act="image">🖼 Inserir imagem no nó</button>
         <button data-act="theme" id="miTheme">🌙 Tema escuro</button>
       </div>
@@ -268,7 +289,7 @@
     <div style="display:none">
       <button id="btnNew"></button><button id="btnMaps"></button><button id="btnImg"></button>
       <button id="btnImport"></button><button id="btnExportMd"></button><button id="btnExportJson"></button>
-      <button id="btnExpand"></button><button id="btnCollapse"></button><button id="btnTheme"></button>
+      <button id="btnExpand"></button><button id="btnCollapse"></button><button id="btnTheme"></button><button id="btnAI"></button>
     </div>
     <input type="file" id="file" accept=".md,.markdown,.json,.svg,text/markdown,application/json,image/svg+xml" hidden>
     <input type="file" id="imgfile" accept="image/*" hidden>
@@ -351,6 +372,22 @@
       <div class="cl-actions">
         <button class="btn" id="usClose">Fechar</button>
         <button class="btn primary" id="usCreate">Criar usuário</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- atualizar mapa a partir de resumo de reunião (IA / Bedrock) -->
+  <div id="ai" hidden>
+    <div class="card">
+      <h3>🤖 Atualizar pela reunião</h3>
+      <p class="sub">Cole o resumo ou a transcrição da reunião. O Sonnet analisa o mapa atual e propõe as mudanças; você revisa antes de aplicar.</p>
+      <textarea id="aiText" placeholder="Ex.: Decidimos avançar com o protótipo até 15/07. A tarefa de definir a API foi concluída. Criar nova frente de marketing com responsável..."></textarea>
+      <div id="aiSummary"></div>
+      <div id="aiOps"></div>
+      <div class="cl-actions">
+        <button class="btn" id="aiClose">Fechar</button>
+        <button class="btn" id="aiRun">Analisar</button>
+        <button class="btn primary" id="aiApply" disabled>Aplicar selecionadas</button>
       </div>
     </div>
   </div>
@@ -1170,11 +1207,97 @@ document.querySelectorAll(".menu .menu-btn").forEach(btn=>{
 });
 document.addEventListener("click",()=>document.querySelectorAll(".menu.open").forEach(x=>x.classList.remove("open")));
 const MENU_ACT={ new:"btnNew", maps:"btnMaps", import:"btnImport", expmd:"btnExportMd", expjson:"btnExportJson",
-  expand:"btnExpand", collapse:"btnCollapse", image:"btnImg", theme:"btnTheme" };
+  expand:"btnExpand", collapse:"btnCollapse", image:"btnImg", theme:"btnTheme", ai:"btnAI" };
 document.querySelectorAll(".menu-list [data-act]").forEach(it=>{
   it.addEventListener("click",e=>{ e.stopPropagation(); const id=MENU_ACT[it.dataset.act];
     if(id&&$(id)) $(id).click(); it.closest(".menu").classList.remove("open"); });
 });
+
+/* ===================================================================
+   IA: atualizar mapa a partir de resumo de reunião (Bedrock/Sonnet)
+=================================================================== */
+// markdown com ids p/ o modelo referenciar nós existentes
+function dataToMdIds(data){
+  const r=data.nodeData; let out="# [#"+r.id+"] "+mdEnc(r.topic||"Mapa")+"\n";
+  (function w(kids,d){ (kids||[]).forEach(n=>{ out+="  ".repeat(d)+"- [#"+n.id+"] "+mdEnc(n.topic||"")+"\n";
+    if(n.children&&n.children.length) w(n.children,d+1); }); })(r.children,0);
+  return out;
+}
+function indexTree(data){ const map={};
+  (function w(n,parent){ map[n.id]={node:n,parent}; (n.children||[]).forEach(c=>w(c,n)); })(data.nodeData,null);
+  return map; }
+const stripCbPfx=t=>(t||"").replace(/^\s*\[(?:\s|x|X)?\]\s*/,"");
+const setDoneText=t=>"[x] "+stripCbPfx(t);
+const setDueText=(t,due)=>(t||"").replace(/\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s*$/,"").trimEnd()+" "+due;
+function makeNode(text,children){ const n={id:rid(),topic:text||"",children:[]};
+  (children||[]).forEach(c=>n.children.push(makeNode(c.text,c.children))); return n; }
+function isDesc(node,maybe){ let f=false; (function w(n){ if(n===maybe)f=true; (n.children||[]).forEach(w); })(node); return f; }
+function plainTopic(t){ return stripCbPfx((t||"").replace(/<[^>]+>/g,"")).trim(); }
+function clip(s,n){ s=s||""; return s.length>n? s.slice(0,n-1)+"…" : s; }
+function applyOps(ops){
+  const data=JSON.parse(JSON.stringify(mind.getData())); const idx=indexTree(data); let n=0;
+  for(const op of ops){ try{
+    if(op.op==="add"){ const p=(idx[op.parent]&&idx[op.parent].node)||data.nodeData; const nn=makeNode(op.text,op.children);
+      (p.children=p.children||[]).push(nn);
+      (function w(x,par){ idx[x.id]={node:x,parent:par}; (x.children||[]).forEach(c=>w(c,x)); })(nn,p); n++; }
+    else if(op.op==="edit"){ const e=idx[op.id]; if(e){ e.node.topic=op.text||""; delete e.node.dangerouslySetInnerHTML; n++; } }
+    else if(op.op==="done"){ const e=idx[op.id]; if(e){ e.node.topic=setDoneText(e.node.topic); delete e.node.dangerouslySetInnerHTML; n++; } }
+    else if(op.op==="date"){ const e=idx[op.id]; if(e&&op.due){ e.node.topic=setDueText(e.node.topic,op.due); delete e.node.dangerouslySetInnerHTML; n++; } }
+    else if(op.op==="move"){ const e=idx[op.id], np=idx[op.parent]&&idx[op.parent].node;
+      if(e&&np&&e.parent&&np!==e.node&&!isDesc(e.node,np)){
+        e.parent.children=e.parent.children.filter(c=>c!==e.node); (np.children=np.children||[]).push(e.node); e.parent=np; n++; } }
+    else if(op.op==="delete"){ const e=idx[op.id]; if(e&&e.parent){ e.parent.children=e.parent.children.filter(c=>c!==e.node); n++; } }
+  }catch(err){ console.warn("op falhou",op,err); } }
+  mind.refresh(data); save(); recenter(); setTimeout(()=>decorate(),80);
+  return n;
+}
+function opLabel(op,idx){
+  const nm=id=>{ const e=idx&&idx[id]; return e? '"'+clip(plainTopic(e.node.topic),60)+'"' : "(nó)"; };
+  switch(op.op){
+    case "add": { const sub=(op.children&&op.children.length)?` (+${op.children.length} sub)`:""; return `＋ Adicionar "${clip(plainTopic(op.text),60)}"${sub} em ${nm(op.parent)}`; }
+    case "edit": return `✎ Reescrever ${nm(op.id)} → "${clip(plainTopic(op.text),60)}"`;
+    case "done": return `✓ Concluir ${nm(op.id)}`;
+    case "date": return `📅 Prazo ${op.due} em ${nm(op.id)}`;
+    case "move": return `↦ Mover ${nm(op.id)} para ${nm(op.parent)}`;
+    case "delete": return `🗑 Apagar ${nm(op.id)}`;
+    default: return JSON.stringify(op);
+  }
+}
+let aiOps=[], aiIdx=null;
+function renderAiOps(ops,summary){
+  aiOps=ops; const box=$("aiOps");
+  $("aiSummary").textContent = summary || "";
+  if(!ops.length){ box.innerHTML='<div class="sub" style="padding:6px 2px">Nenhuma mudança proposta.</div>'; $("aiApply").disabled=true; return; }
+  box.innerHTML = ops.map((op,i)=>{ const del=op.op==="delete";
+    return `<label class="ai-row${del?' del':''}"><input type="checkbox" data-i="${i}" ${del?'':'checked'}>`+
+      `<span>${escH(opLabel(op,aiIdx))}</span>`+
+      (op.reason?`<em class="ai-why">${escH(op.reason)}</em>`:"")+`</label>`;
+  }).join("");
+  $("aiApply").disabled=false;
+}
+$("btnAI").onclick=()=>{
+  if(!(API&&token)){ alert("Disponível apenas no modo nuvem (faça login na sua conta)."); return; }
+  $("aiText").value=""; $("aiOps").innerHTML=""; $("aiSummary").textContent=""; $("aiApply").disabled=true;
+  $("ai").hidden=false; setTimeout(()=>$("aiText").focus(),50);
+};
+$("aiClose").onclick=()=>{ $("ai").hidden=true; };
+$("aiRun").onclick=async()=>{
+  const transcript=$("aiText").value.trim(); if(!transcript){ $("aiText").focus(); return; }
+  const btn=$("aiRun"), old=btn.textContent; btn.disabled=true; btn.textContent="Analisando…";
+  $("aiApply").disabled=true; $("aiOps").innerHTML=""; $("aiSummary").textContent="Consultando o Sonnet…";
+  try{
+    aiIdx=indexTree(mind.getData());
+    const r=await apiJSON("POST","/ai/analyze",{markdown:dataToMdIds(mind.getData()),transcript});
+    renderAiOps(r.ops||[], r.summary||"");
+  }catch(e){ $("aiSummary").textContent="Erro: "+e.message; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+};
+$("aiApply").onclick=()=>{
+  const chosen=[...$("aiOps").querySelectorAll("input:checked")].map(c=>aiOps[+c.dataset.i]).filter(Boolean);
+  if(!chosen.length){ alert("Selecione ao menos uma mudança."); return; }
+  const n=applyOps(chosen); $("ai").hidden=true;
+  $("aiSummary").textContent=""; flash();
+};
 
 /* PWA: registra service worker (só em http(s); ignora file://) */
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){

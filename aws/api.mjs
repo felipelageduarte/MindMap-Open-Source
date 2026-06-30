@@ -7,9 +7,12 @@ import { DynamoDBClient, GetItemCommand, PutItemCommand, QueryCommand,
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 
 const ddb = new DynamoDBClient({});
 const s3  = new S3Client({});
+const brt = new BedrockRuntimeClient({ region: process.env.BEDROCK_REGION || process.env.AWS_REGION || "us-east-1" });
+const MODEL = process.env.BEDROCK_MODEL || "us.anthropic.claude-sonnet-4-6";
 const BUCKET = process.env.BUCKET;
 const USERS  = process.env.USERS_TABLE;
 const MAPS   = process.env.MAPS_TABLE;
@@ -136,6 +139,53 @@ async function blobUrl(user, id, op) {
   return res(200, { url: await getSignedUrl(s3, cmd, { expiresIn: 300 }) });
 }
 
+/* ---- IA: atualizar mapa a partir de resumo de reunião (Bedrock / Claude Sonnet) ---- */
+const AI_SYSTEM = `Você atualiza um mapa mental (mindmap) a partir do resumo/transcrição de uma reunião.
+Recebe: (1) o MAPA ATUAL em markdown, onde cada linha começa com o id do nó entre colchetes, ex: "  - [#me3] Texto do nó"; (2) o RESUMO DA REUNIÃO.
+Tarefa: propor as mudanças necessárias no mapa — adicionar nós, marcar itens como concluídos, pôr datas, reescrever textos, criar hierarquia/sub-tarefas, mover ou apagar nós.
+
+Responda APENAS com um objeto JSON válido (sem texto fora dele, sem cercas de código), no formato:
+{"summary":"<resumo curto em pt-BR do que mudou>","ops":[ ...operações... ]}
+
+Operações possíveis (cada uma é um objeto):
+- {"op":"add","parent":"<id>","text":"<texto>","children":[{"text":"...","children":[...]}],"reason":"<por quê>"} — novo nó filho de parent. "children" é opcional e permite criar sub-hierarquia de uma vez.
+- {"op":"edit","id":"<id>","text":"<novo texto>","reason":"..."} — reescreve o texto do nó.
+- {"op":"done","id":"<id>","reason":"..."} — marca o checkbox do nó como concluído.
+- {"op":"date","id":"<id>","due":"DD/MM ou DD/MM/AAAA","reason":"..."} — define prazo do nó.
+- {"op":"move","id":"<id>","parent":"<novo-pai-id>","reason":"..."} — move o nó para outro pai.
+- {"op":"delete","id":"<id>","reason":"..."} — apaga o nó (use com cautela).
+
+Convenções de texto:
+- Checkbox: comece o texto com "[] " (pendente) ou "[x] " (feito). Ex: "[] Enviar proposta".
+- Datas/prazos: ao fim do texto, "DD/MM" ou "DD/MM/AAAA". Ex: "[] Enviar proposta 15/07".
+- Use os ids EXISTENTES (sem o "#") em edit/done/date/move/delete e como "parent" de add.
+- Seja conservador: só proponha mudanças sustentadas pelo resumo; não duplique nós já existentes. Todo texto em pt-BR.
+- Se nada precisa mudar: {"summary":"Nenhuma mudança necessária.","ops":[]}.`;
+
+async function aiAnalyze(b) {
+  const markdown = String(b.markdown || "").slice(0, 120000);
+  const transcript = String(b.transcript || "").trim().slice(0, 120000);
+  if (!transcript) return res(400, { error: "resumo da reunião vazio" });
+  const userMsg = `# MAPA ATUAL (markdown com ids)\n\n${markdown}\n\n# RESUMO DA REUNIÃO\n\n${transcript}`;
+  const payload = {
+    anthropic_version: "bedrock-2023-05-31", max_tokens: 8000, system: AI_SYSTEM,
+    messages: [{ role: "user", content: userMsg }],
+  };
+  let out;
+  try {
+    const r = await brt.send(new InvokeModelCommand({ modelId: MODEL,
+      contentType: "application/json", accept: "application/json", body: JSON.stringify(payload) }));
+    const data = JSON.parse(Buffer.from(r.body).toString("utf8"));
+    out = (data.content || []).map((c) => c.text || "").join("");
+  } catch (e) { console.error("bedrock", e); return res(502, { error: "Falha ao chamar o modelo: " + String(e?.message || e) }); }
+  const txt = (out || "").trim();
+  let parsed = null;
+  try { parsed = JSON.parse(txt); }
+  catch { const m = txt.match(/\{[\s\S]*\}/); if (m) { try { parsed = JSON.parse(m[0]); } catch {} } }
+  if (!parsed || !Array.isArray(parsed.ops)) return res(502, { error: "Resposta do modelo inválida." });
+  return res(200, { summary: parsed.summary || "", ops: parsed.ops, model: MODEL });
+}
+
 /* ---- admin ---- */
 async function listUsers() {
   const r = await ddb.send(new ScanCommand({ TableName: USERS }));
@@ -176,6 +226,7 @@ export const handler = async (event) => {
 
     if (method === "GET" && path === "/me") return res(200, { email: user.email, name: user.name, role: user.role });
     if (method === "POST" && path === "/auth/password") return await changePassword(user, body(event));
+    if (method === "POST" && path === "/ai/analyze") return await aiAnalyze(body(event));
 
     if (seg[0] === "maps") {
       if (seg.length === 1) {
