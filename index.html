@@ -153,6 +153,12 @@
   body.dark .ai-row{border-color:#3a3a40}
   body.dark .ai-row:hover{background:#3a3a40}
   body.dark .ai-row.del{border-color:#5a2b2b;background:#3a2626} body.dark .ai-row.del span{color:#ff9b91}
+  #aiCopy{margin:0 0 12px;font-size:12px;padding:6px 10px}
+  /* destaque dos nós alterados pela IA (some após ~1min ou no reload) */
+  .mm-hl{ border-radius:9px; animation:mmHl 1.15s ease-in-out infinite alternate; }
+  @keyframes mmHl{
+    from{ box-shadow:0 0 0 2px rgba(10,132,255,.55), 0 0 9px 1px rgba(10,132,255,.40); }
+    to{   box-shadow:0 0 0 3px rgba(10,132,255,.95), 0 0 18px 3px rgba(10,132,255,.70); } }
   .fld{display:block;font-size:12.5px;color:#444;margin-bottom:12px}
   .fld input{display:block;width:100%;margin-top:5px;font:inherit;font-size:13.5px;padding:9px 11px;
     border:1px solid var(--line);border-radius:8px;background:#fafafa}
@@ -381,6 +387,7 @@
     <div class="card">
       <h3>🤖 Atualizar pela reunião</h3>
       <p class="sub">Cole o resumo ou a transcrição da reunião. O Sonnet analisa o mapa atual e propõe as mudanças; você revisa antes de aplicar.</p>
+      <button class="btn" id="aiCopy" title="Copia um prompt pronto; cole no Copilot do Teams para gerar o resumo da reunião">📋 Copiar prompt para o Copilot do Teams</button>
       <textarea id="aiText" placeholder="Ex.: Decidimos avançar com o protótipo até 15/07. A tarefa de definir a API foi concluída. Criar nova frente de marketing com responsável..."></textarea>
       <div id="aiSummary"></div>
       <div id="aiOps"></div>
@@ -1235,21 +1242,35 @@ function isDesc(node,maybe){ let f=false; (function w(n){ if(n===maybe)f=true; (
 function plainTopic(t){ return stripCbPfx((t||"").replace(/<[^>]+>/g,"")).trim(); }
 function clip(s,n){ s=s||""; return s.length>n? s.slice(0,n-1)+"…" : s; }
 function applyOps(ops){
-  const data=JSON.parse(JSON.stringify(mind.getData())); const idx=indexTree(data); let n=0;
+  const data=JSON.parse(JSON.stringify(mind.getData())); const idx=indexTree(data); let n=0; const touched=new Set();
   for(const op of ops){ try{
     if(op.op==="add"){ const p=(idx[op.parent]&&idx[op.parent].node)||data.nodeData; const nn=makeNode(op.text,op.children);
       (p.children=p.children||[]).push(nn);
-      (function w(x,par){ idx[x.id]={node:x,parent:par}; (x.children||[]).forEach(c=>w(c,x)); })(nn,p); n++; }
-    else if(op.op==="edit"){ const e=idx[op.id]; if(e){ e.node.topic=op.text||""; delete e.node.dangerouslySetInnerHTML; n++; } }
-    else if(op.op==="done"){ const e=idx[op.id]; if(e){ e.node.topic=setDoneText(e.node.topic); delete e.node.dangerouslySetInnerHTML; n++; } }
-    else if(op.op==="date"){ const e=idx[op.id]; if(e&&op.due){ e.node.topic=setDueText(e.node.topic,op.due); delete e.node.dangerouslySetInnerHTML; n++; } }
+      (function w(x,par){ idx[x.id]={node:x,parent:par}; touched.add(x.id); (x.children||[]).forEach(c=>w(c,x)); })(nn,p); n++; }
+    else if(op.op==="edit"){ const e=idx[op.id]; if(e){ e.node.topic=op.text||""; delete e.node.dangerouslySetInnerHTML; touched.add(op.id); n++; } }
+    else if(op.op==="done"){ const e=idx[op.id]; if(e){ e.node.topic=setDoneText(e.node.topic); delete e.node.dangerouslySetInnerHTML; touched.add(op.id); n++; } }
+    else if(op.op==="date"){ const e=idx[op.id]; if(e&&op.due){ e.node.topic=setDueText(e.node.topic,op.due); delete e.node.dangerouslySetInnerHTML; touched.add(op.id); n++; } }
     else if(op.op==="move"){ const e=idx[op.id], np=idx[op.parent]&&idx[op.parent].node;
       if(e&&np&&e.parent&&np!==e.node&&!isDesc(e.node,np)){
-        e.parent.children=e.parent.children.filter(c=>c!==e.node); (np.children=np.children||[]).push(e.node); e.parent=np; n++; } }
+        e.parent.children=e.parent.children.filter(c=>c!==e.node); (np.children=np.children||[]).push(e.node); e.parent=np; touched.add(op.id); n++; } }
     else if(op.op==="delete"){ const e=idx[op.id]; if(e&&e.parent){ e.parent.children=e.parent.children.filter(c=>c!==e.node); n++; } }
   }catch(err){ console.warn("op falhou",op,err); } }
-  mind.refresh(data); save(); recenter(); setTimeout(()=>decorate(),80);
+  mind.refresh(data); save();
+  // expande ancestrais recolhidos dos nós tocados (p/ ficarem visíveis)
+  touched.forEach(id=>{ const path=pathToNode(mind.getData().nodeData,id,[]); if(!path) return;
+    for(const a of path){ const ae=findEleSafe(a.id);
+      if(ae && ae.nodeObj && ae.nodeObj.expanded===false){ try{ mind.expandNodeAll(ae,true); }catch(e){} break; } } });
+  recenter(); setTimeout(()=>{ decorate(); highlightNodes([...touched]); },140);
   return n;
+}
+/* destaque temporário dos nós alterados pela IA */
+let hlTimer=null;
+function clearHighlights(){ document.querySelectorAll(".mm-hl").forEach(e=>e.classList.remove("mm-hl")); if(hlTimer){ clearTimeout(hlTimer); hlTimer=null; } }
+function highlightNodes(ids){
+  clearHighlights(); if(!ids||!ids.length) return; let first=null;
+  ids.forEach(id=>{ const el=findEleSafe(id); if(el){ el.classList.add("mm-hl"); if(!first) first=el; } });
+  if(first){ try{ mind.scrollIntoView(first,true); }catch(e){} }
+  hlTimer=setTimeout(clearHighlights,60000);   // some após ~1 min (ou no reload da página)
 }
 function opLabel(op,idx){
   const nm=id=>{ const e=idx&&idx[id]; return e? '"'+clip(plainTopic(e.node.topic),60)+'"' : "(nó)"; };
@@ -1275,6 +1296,24 @@ function renderAiOps(ops,summary){
   }).join("");
   $("aiApply").disabled=false;
 }
+const COPILOT_PROMPT=`Resuma esta reunião para alimentar a atualização de um mapa mental de projeto. Escreva em português (pt-BR), texto corrido em tópicos, sem tabelas. Seja específico e factual — use só o que foi dito. Organize EXATAMENTE nestas seções:
+
+1. DECISÕES — decisões tomadas (uma por linha).
+2. CONCLUÍDO — tarefas/itens marcados como finalizados na reunião.
+3. NOVAS TAREFAS — itens a fazer. Para cada um: o que fazer, responsável (se citado) e prazo no formato DD/MM ou DD/MM/AAAA quando houver. Ex.: "Enviar proposta — João — 15/07".
+4. MUDANÇAS — itens existentes que mudaram de escopo, foram repriorizados ou reescritos (descreva o antes → depois).
+5. NOVOS TEMAS/FRENTES — assuntos ou áreas novas que surgiram, com sub-itens se houver hierarquia.
+6. PENDÊNCIAS — perguntas em aberto ou itens sem responsável/decisão.
+
+Regras: cada item em uma linha; inclua datas sempre que mencionadas (DD/MM); cite nomes de responsáveis; não invente nada; se uma seção não tiver conteúdo, escreva "—".`;
+$("aiCopy").onclick=async()=>{
+  const btn=$("aiCopy"), old=btn.textContent;
+  try{ await navigator.clipboard.writeText(COPILOT_PROMPT); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=COPILOT_PROMPT; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand("copy"); }catch(_){} ta.remove(); }
+  btn.textContent="✓ Prompt copiado — cole no Copilot do Teams";
+  clearTimeout($("aiCopy")._t); $("aiCopy")._t=setTimeout(()=>btn.textContent=old,2600);
+};
 $("btnAI").onclick=()=>{
   if(!(API&&token)){ alert("Disponível apenas no modo nuvem (faça login na sua conta)."); return; }
   $("aiText").value=""; $("aiOps").innerHTML=""; $("aiSummary").textContent=""; $("aiApply").disabled=true;
