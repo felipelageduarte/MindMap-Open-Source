@@ -1,0 +1,24 @@
+{
+  "name": "mindmap",
+  "version": "1.0.0",
+  "description": "Editor de mapas mentais **offline-first**, em um único arquivo HTML, com sincronização opcional na nuvem (AWS serverless) e multiusuário. Motor de render: [Mind-Elixir](https://github.com/SSShooter/mind-elixir-core) (MIT).",
+  "main": "sw.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/felipelageduarte/MindMap-Open-Source.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/felipelageduarte/MindMap-Open-Source/issues"
+  },
+  "homepage": "https://github.com/felipelageduarte/MindMap-Open-Source#readme",
+  "dependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}

@@ -699,7 +699,8 @@ function attachImage(file){
       cv.getContext("2d").drawImage(img,0,0,cw,ch);
       const url=cv.toDataURL("image/jpeg",0.85);
       const dw=Math.min(cw,IMG_DISP), dh=Math.round(ch*dw/cw);
-      mind.reshapeNode(tpc,{image:{url,width:dw,height:dh}});  // dispara autosave
+      mind.reshapeNode(tpc,{image:{url,width:dw,height:dh}});
+      save();   // reshapeNode não dispara operation → salvar explicitamente
     };
     img.onerror=()=>alert("Não consegui ler a imagem.");
     img.src=fr.result;
@@ -715,7 +716,7 @@ document.addEventListener("paste",(e)=>{
 $("btnImg").onclick=()=>{
   const tpc=mind.currentNode;
   if(tpc&&tpc.nodeObj&&tpc.nodeObj.image){
-    if(confirm("Remover imagem deste nó?")) mind.reshapeNode(tpc,{image:undefined});
+    if(confirm("Remover imagem deste nó?")){ mind.reshapeNode(tpc,{image:undefined}); save(); }
     return;
   }
   $("imgfile").click();
