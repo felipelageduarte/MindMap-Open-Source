@@ -228,6 +228,20 @@
   .rich-ed a{color:var(--accent);text-decoration:underline}
   /* link no nó: clicável (ME bloqueia pointer-events em filhos) + estilo */
   .map-container me-tpc a{pointer-events:auto!important;color:var(--accent);text-decoration:underline;cursor:pointer}
+  /* imagem no nó: clicável p/ lightbox */
+  .map-container me-tpc img{pointer-events:auto!important;cursor:zoom-in;border-radius:6px;display:block;transition:opacity .15s}
+  .map-container me-tpc img:hover{opacity:.85}
+  /* lightbox */
+  #imgLb[hidden]{display:none}
+  #imgLb{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.82);display:flex;align-items:center;
+    justify-content:center;cursor:zoom-out;animation:lbIn .15s ease}
+  @keyframes lbIn{from{opacity:0}to{opacity:1}}
+  #imgLb img{max-width:90vw;max-height:90vh;border-radius:10px;box-shadow:0 8px 48px rgba(0,0,0,.6);
+    object-fit:contain;cursor:default;pointer-events:none}
+  #imgLbClose{position:fixed;top:18px;right:22px;width:36px;height:36px;border-radius:50%;border:none;
+    background:rgba(255,255,255,.18);color:#fff;font-size:20px;cursor:pointer;display:flex;
+    align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:.12s}
+  #imgLbClose:hover{background:rgba(255,255,255,.32)}
   body.dark .map-container me-tpc a{color:#7fb4ff}
 
   /* tema escuro (chrome do app; o mapa usa o tema do Mind-Elixir) */
@@ -380,6 +394,12 @@
         <button class="btn primary" id="usCreate">Criar usuário</button>
       </div>
     </div>
+  </div>
+
+  <!-- lightbox de imagem do nó -->
+  <div id="imgLb" hidden>
+    <button id="imgLbClose" title="Fechar (Esc)">✕</button>
+    <img id="imgLbImg" src="" alt="">
   </div>
 
   <!-- atualizar mapa a partir de resumo de reunião (IA / Bedrock) -->
@@ -1296,6 +1316,22 @@ function renderAiOps(ops,summary){
   }).join("");
   $("aiApply").disabled=false;
 }
+/* ---- lightbox de imagens dos nós ---- */
+function openLightbox(url){ $("imgLbImg").src=url; $("imgLb").hidden=false; }
+function closeLightbox(){ $("imgLb").hidden=true; $("imgLbImg").src=""; }
+$("imgLb").addEventListener("click",(e)=>{ if(e.target===e.currentTarget) closeLightbox(); });
+$("imgLbClose").addEventListener("click",closeLightbox);
+// captura cliques em img dentro de me-tpc (pointer-events:auto!important no CSS)
+document.addEventListener("click",(e)=>{
+  const img=e.target.closest("me-tpc img");
+  if(!img) return;
+  e.stopPropagation();
+  const tpc=img.closest("me-tpc");
+  const url=(tpc&&tpc.nodeObj&&tpc.nodeObj.image&&tpc.nodeObj.image.url)||img.src;
+  if(url) openLightbox(url);
+}, true);
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"&&!$("imgLb").hidden){ closeLightbox(); e.stopPropagation(); } }, true);
+
 const COPILOT_PROMPT=`Resuma esta reunião para alimentar a atualização de um mapa mental de projeto. Escreva em português (pt-BR), texto corrido em tópicos, sem tabelas. Seja específico e factual — use só o que foi dito. Organize EXATAMENTE nestas seções:
 
 1. DECISÕES — decisões tomadas (uma por linha).
